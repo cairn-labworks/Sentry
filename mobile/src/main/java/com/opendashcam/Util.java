@@ -146,6 +146,57 @@ public final class Util {
         return CamcorderProfile.QUALITY_HIGH;
     }
 
+    // --- Recording lifecycle (shared by the home screen and the shortcut) ---
+
+    /**
+     * Starts the dashcam: optionally launches navigation, then starts the recorder and the
+     * overlay widget services. Assumes required permissions (camera, mic, overlay) are granted.
+     */
+    public static void startRecordingServices(Context context) {
+        Context app = context.getApplicationContext();
+
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(app);
+        if (settings.getBoolean("start_maps_in_background", true)) {
+            launchNavigation(app);
+        }
+
+        app.startService(new Intent(app, BackgroundVideoRecorder.class));
+        app.startService(new Intent(app, WidgetService.class));
+    }
+
+    /**
+     * Stops the dashcam: stops the recorder (finalizing the current clip) and the widget service.
+     */
+    public static void stopRecordingServices(Context context) {
+        Context app = context.getApplicationContext();
+        app.stopService(new Intent(app, BackgroundVideoRecorder.class));
+        app.stopService(new Intent(app, WidgetService.class));
+    }
+
+    /**
+     * Whether the dashcam is currently recording.
+     */
+    public static boolean isRecording() {
+        return BackgroundVideoRecorder.isRecording;
+    }
+
+    /**
+     * Launches Google Maps in driving-navigation mode, if installed.
+     */
+    private static void launchNavigation(Context app) {
+        try {
+            Intent intent = app.getPackageManager()
+                    .getLaunchIntentForPackage("com.google.android.apps.maps");
+            if (intent == null) return;
+            intent.setAction(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse("google.navigation:/?free=1&mode=d&entry=fnls"));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            app.startActivity(intent);
+        } catch (Exception ignored) {
+            // Maps not installed or cannot launch; ignore
+        }
+    }
+
     public static File getVideosDirectoryPath() {
         //remove an old directory if exists
         File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/OpenDashCam/");

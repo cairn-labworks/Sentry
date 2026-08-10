@@ -15,7 +15,6 @@ import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
@@ -137,12 +136,12 @@ public class SettingsActivity extends AppCompatActivity {
         maps.setOnCheckedChangeListener((b, checked) ->
                 prefs.edit().putBoolean("start_maps_in_background", checked).apply());
 
-        MaterialButton deleteAll = findViewById(R.id.btn_delete_all);
+        TextView deleteAll = findViewById(R.id.btn_delete_all);
         deleteAll.setOnClickListener(v -> new AlertDialog.Builder(this)
                 .setTitle("Delete all recordings")
                 .setMessage("Delete all recordings? This cannot be undone.")
                 .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(android.R.string.ok, (d, w) -> Util.deleteRecordings())
+                .setPositiveButton("Delete all", (d, w) -> Util.deleteRecordings())
                 .show());
     }
 

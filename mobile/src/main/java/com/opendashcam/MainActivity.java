@@ -1,47 +1,60 @@
 package com.opendashcam;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import androidx.core.app.ActivityCompat;
 import android.text.TextUtils;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
+/**
+ * Home screen. Shows a big REC button, storage usage, and shortcuts to Recordings and Settings.
+ * Recording is NOT started automatically on launch; the user starts it from the REC button or a
+ * pinned "Start Recording" home-screen shortcut.
+ */
+public class MainActivity extends AppCompatActivity {
 
-public class MainActivity extends Activity {
+    /** When present and true, the activity immediately attempts to start recording (used by the shortcut). */
+    public static final String EXTRA_START_RECORDING = "com.opendashcam.START_RECORDING";
+    private static final String SHORTCUT_ID = "start_recording";
 
     public static final int MULTIPLE_PERMISSIONS_RESPONSE_CODE = 10;
     private static final int CODE_REQUEST_PERMISSION_TO_MUTE_SYSTEM_SOUND = 10001;
     private static final int CODE_REQUEST_PERMISSION_DRAW_OVER_APPS = 10002;
 
-    /**
-     * Builds the list of runtime permissions to request, adapting to the Android version.
-     * Camera and microphone are always required; legacy storage is only requested on old
-     * versions, and notification permission only on Android 13+.
-     */
+    /** True while a start-recording flow is waiting on a permission result. */
+    private boolean mPendingStart = false;
+
+    private TextView mStorageText, mStoragePercent, mRecSubtitle;
+
     private String[] getRequiredPermissions() {
         List<String> perms = new ArrayList<>();
         perms.add(Manifest.permission.CAMERA);
         perms.add(Manifest.permission.RECORD_AUDIO);
-        // Legacy external storage write is only used (and grantable) up to Android 9 (API 28);
-        // newer versions use app-specific storage which needs no permission.
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
-        // Runtime notification permission was introduced in Android 13 (API 33).
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS);
         }
@@ -51,123 +64,166 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        init();
+
+        // First launch => show the tutorial, then return here
+        SharedPreferences sharedPref = getApplicationContext().getSharedPreferences(
+                getString(R.string.db_first_launch_complete_flag), Context.MODE_PRIVATE);
+        String firstLaunchFlag = sharedPref.getString(
+                getString(R.string.db_first_launch_complete_flag), "null");
+        if (TextUtils.isEmpty(firstLaunchFlag)) {
+            startActivity(new Intent(this, WelcomeActivity.class));
+            finish();
+            return;
+        }
+
+        setContentView(R.layout.activity_main);
+        bindViews();
+
+        // If launched from the shortcut, start recording right away
+        if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_START_RECORDING, false)) {
+            attemptStartRecording();
+        }
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        switch (requestCode) {
-            case CODE_REQUEST_PERMISSION_TO_MUTE_SYSTEM_SOUND:
-                //if user has not allowed this permission close the app, otherwise continue
-                if (isPermissionToMuteSystemSoundGranted()) {
-                    init();
-                } else {
-                    finish();
-                }
-                break;
-            case CODE_REQUEST_PERMISSION_DRAW_OVER_APPS:
-                //if user has not allowed this permission close the app, otherwise continue
-                if (Settings.canDrawOverlays(this)) {
-                    init();
-                } else {
-                    finish();
-                }
-                break;
-            default:
-                super.onActivityResult(requestCode, resultCode, data);
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getBooleanExtra(EXTRA_START_RECORDING, false)) {
+            attemptStartRecording();
         }
     }
 
-    private void init() {
-        // Check permissions to draw over apps
-        if (!checkDrawPermission()) return;
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateUi();
+    }
 
-        //@dmitriy.chernysh:
-        //check permission to mute system audio on Android 7 (AudioManager setStreamVolume)
-        //java.lang.SecurityException: Not allowed to change Do Not Disturb state
-        if (!checkPermissionToMuteSystemSound()) return;
+    private void bindViews() {
+        mStorageText = findViewById(R.id.storage_text);
+        mStoragePercent = findViewById(R.id.storage_percent);
+        mRecSubtitle = findViewById(R.id.rec_subtitle);
 
-        if (checkPermissions()) {
-            startApp();
+        findViewById(R.id.btn_rec).setOnClickListener(v -> onRecClicked());
+        findViewById(R.id.btn_settings).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.card_settings).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.card_recordings).setOnClickListener(v ->
+                startActivity(new Intent(this, ViewRecordingsActivity.class)));
+        findViewById(R.id.btn_add_shortcut).setOnClickListener(v -> addStartRecordingShortcut());
+    }
+
+    private void onRecClicked() {
+        if (Util.isRecording()) {
+            Util.stopRecordingServices(this);
+            Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show();
+            // Reflect the change after services wind down
+            findViewById(R.id.rec_subtitle).postDelayed(this::updateUi, 600);
+        } else {
+            attemptStartRecording();
         }
     }
 
-    private void startApp() {
+    private void updateUi() {
+        // Storage bar
+        File dir = Util.getVideosDirectoryPath();
+        long usedMb = Util.getFolderSize(dir);
+        long quotaMb = Util.getQuota();
+        mStorageText.setText(String.format(Locale.US, "%.1f GB / %.0f GB",
+                usedMb / 1024f, quotaMb / 1024f));
+        int pct = quotaMb > 0 ? (int) Math.min(100, usedMb * 100 / quotaMb) : 0;
+        mStoragePercent.setText(pct + "%");
+
+        // REC state
+        mRecSubtitle.setText(Util.isRecording()
+                ? "Recording in progress. Tap to stop."
+                : "Mount securely. Tap to start.");
+    }
+
+    // --- Start-recording flow (with permission gating) ---
+
+    private void attemptStartRecording() {
+        if (Util.isRecording()) {
+            Toast.makeText(this, "Already recording", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mPendingStart = true;
+
+        if (!checkDrawPermission()) return;            // async -> onActivityResult
+        if (!checkPermissionToMuteSystemSound()) return; // async -> onActivityResult
+        if (!checkPermissions()) return;               // async -> onRequestPermissionsResult
+
+        doStartRecording();
+    }
+
+    private void doStartRecording() {
+        mPendingStart = false;
 
         if (!isEnoughStorage()) {
-            Util.showToastLong(this.getApplicationContext(),
-                    "Not enough storage to run the app (Need " + String.valueOf(Util.getQuota())
+            Util.showToastLong(getApplicationContext(),
+                    "Not enough storage to run the app (Need " + Util.getQuota()
                             + "MB). Clean up space for recordings.");
-        } else {
-            // Check if first launch => show tutorial
-            // Access shared references file
-            SharedPreferences sharedPref = getApplicationContext().getSharedPreferences(
-                    getString(R.string.db_first_launch_complete_flag),
-                    Context.MODE_PRIVATE);
-
-            String firstLaunchFlag = sharedPref.
-                    getString(getString(R.string.db_first_launch_complete_flag),
-                            "null");
-
-            if (TextUtils.isEmpty(firstLaunchFlag)) {
-                Intent intent = new Intent(getApplicationContext(), WelcomeActivity.class);
-                startActivity(intent);
-                finish();
-                return;
-            }
-
-            // Otherwise
-
-            // Launch navigation app, if settings say so
-            SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-            if (settings.getBoolean("start_maps_in_background", true)) {
-                launchNavigation();
-            }
-
-            // Start recording video
-            Intent videoIntent = new Intent(getApplicationContext(), BackgroundVideoRecorder.class);
-            startService(videoIntent);
-
-            // Start rootView service (display the widgets)
-            Intent i = new Intent(getApplicationContext(), WidgetService.class);
-            startService(i);
+            return;
         }
 
-        // Close the activity, we don't have an app window
-        finish();
+        Util.startRecordingServices(this);
+        Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show();
+        // Give the overlay the foreground; leave home in the background
+        moveTaskToBack(true);
     }
 
+    // --- Home-screen pinned shortcut ---
+
+    private void addStartRecordingShortcut() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Toast.makeText(this, "Home-screen shortcuts require Android 8 or newer.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
+        if (shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported()) {
+            Toast.makeText(this, "Your launcher doesn't support pinned shortcuts.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Intent shortcutIntent = new Intent(this, MainActivity.class);
+        shortcutIntent.setAction(Intent.ACTION_VIEW);
+        shortcutIntent.putExtra(EXTRA_START_RECORDING, true);
+        shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        ShortcutInfo shortcut = new ShortcutInfo.Builder(this, SHORTCUT_ID)
+                .setShortLabel("Start Recording")
+                .setLongLabel("Start Dashcam Recording")
+                .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                .setIntent(shortcutIntent)
+                .build();
+
+        shortcutManager.requestPinShortcut(shortcut, null);
+    }
+
+    // --- Permission helpers ---
+
     private boolean checkDrawPermission() {
-        // for Marshmallow (SDK 23) and newer versions, get overlay permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                /** if not construct intent to request permission */
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
-                /** request permission via start activity for result */
                 startActivityForResult(intent, CODE_REQUEST_PERMISSION_DRAW_OVER_APPS);
-
-                Toast.makeText(MainActivity.this, "Draw over apps permission needed", Toast.LENGTH_LONG)
-                        .show();
-
-                Toast.makeText(MainActivity.this, "Allow and click \"Back\"", Toast.LENGTH_LONG)
-                        .show();
-
-                Toast.makeText(MainActivity.this, "Then restart the Open Dash Cam app", Toast.LENGTH_LONG)
-                        .show();
-
+                Toast.makeText(this, "Please allow \"Display over other apps\", then come back and tap Start.",
+                        Toast.LENGTH_LONG).show();
                 return false;
             }
         }
         return true;
     }
 
-
     private boolean checkPermissions() {
         List<String> listPermissionsNeeded = new ArrayList<>();
         for (String p : getRequiredPermissions()) {
-            if (ActivityCompat.checkSelfPermission(MainActivity.this, p)
-                    != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                 listPermissionsNeeded.add(p);
             }
         }
@@ -180,97 +236,64 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    /**
-     * Check and ask permission to set "Do not Disturb"
-     * Note: it uses in BackgroundVideoRecorder : audio.setStreamVolume()
-     *
-     * @return True - granted
-     */
     private boolean checkPermissionToMuteSystemSound() {
-
         if (!isPermissionToMuteSystemSoundGranted()) {
-            Intent intent = new Intent(
-                    android.provider.Settings
-                            .ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
+            Intent intent = new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
             startActivityForResult(intent, CODE_REQUEST_PERMISSION_TO_MUTE_SYSTEM_SOUND);
             return false;
         }
-
         return true;
     }
 
     private boolean isPermissionToMuteSystemSoundGranted() {
-        //Android 7+ needs this permission (but Samsung devices may work without it)
-        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)) return true;
-
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return true;
         NotificationManager notificationManager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager == null) return true;
-
         return notificationManager.isNotificationPolicyAccessGranted();
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         switch (requestCode) {
-            case MULTIPLE_PERMISSIONS_RESPONSE_CODE: {
-                // Only camera and microphone are mandatory. Denying notifications or legacy
-                // storage should not prevent the dash cam from starting.
-                boolean essentialGranted = true;
-                for (int i = 0; i < permissions.length && i < grantResults.length; i++) {
-                    boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
-                    if (!granted
-                            && (Manifest.permission.CAMERA.equals(permissions[i])
-                            || Manifest.permission.RECORD_AUDIO.equals(permissions[i]))) {
-                        essentialGranted = false;
-                    }
+            case CODE_REQUEST_PERMISSION_TO_MUTE_SYSTEM_SOUND:
+            case CODE_REQUEST_PERMISSION_DRAW_OVER_APPS:
+                // Continue the start flow if the user was in the middle of starting
+                if (mPendingStart) attemptStartRecording();
+                break;
+            default:
+                super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == MULTIPLE_PERMISSIONS_RESPONSE_CODE) {
+            boolean essentialGranted = true;
+            for (int i = 0; i < permissions.length && i < grantResults.length; i++) {
+                boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                if (!granted
+                        && (Manifest.permission.CAMERA.equals(permissions[i])
+                        || Manifest.permission.RECORD_AUDIO.equals(permissions[i]))) {
+                    essentialGranted = false;
                 }
-
-                if (essentialGranted) {
-                    // permissions granted
-                    startApp();
-                } else {
-                    // essential permissions not granted
-                    Toast.makeText(MainActivity.this, "Camera and microphone permissions are required. The app cannot start.", Toast.LENGTH_LONG)
-                            .show();
-
-                    Toast.makeText(MainActivity.this, "Please re-start Open Dash Cam app and grant the requested permissions.", Toast.LENGTH_LONG)
-                            .show();
-
-                    finish();
-                }
-                return;
+            }
+            if (essentialGranted) {
+                if (mPendingStart) attemptStartRecording();
+            } else {
+                mPendingStart = false;
+                Toast.makeText(this,
+                        "Camera and microphone permissions are required to record.",
+                        Toast.LENGTH_LONG).show();
             }
         }
     }
 
-    /**
-     * Starts Google Maps in driving mode.
-     */
-    private void launchNavigation() {
-        String googleMapsPackage = "com.google.android.apps.maps";
-
-        try {
-            Intent intent = getPackageManager().getLaunchIntentForPackage(googleMapsPackage);
-            intent.setAction(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("google.navigation:/?free=1&mode=d&entry=fnls"));
-            startActivity(intent);
-        } catch (Exception e) {
-            return;
-        }
-    }
-
-    private boolean isEnoughStorage(){
+    private boolean isEnoughStorage() {
         File videosFolder = Util.getVideosDirectoryPath();
         if (videosFolder == null) return false;
-
         long appVideosFolderSize = Util.getFolderSize(videosFolder);
         long storageFreeSize = Util.getFreeSpaceExternalStorage(videosFolder);
-        //check enough space
-        if (storageFreeSize + appVideosFolderSize < (Util.getQuota())) {
-            return false;
-        }else {
-            return true;
-        }
+        return storageFreeSize + appVideosFolderSize >= Util.getQuota();
     }
 }
