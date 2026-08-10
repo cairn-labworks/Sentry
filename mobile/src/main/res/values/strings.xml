@@ -53,10 +53,47 @@ Starred recordings will not be deleted.</string>
         Cam
     </string>
     <string name="pref_delete_recordings_confirmation">All recordings deleted</string>
+
+    <!-- Recording category -->
+    <string name="pref_category_recording">Recording</string>
+
+    <string name="pref_title_clip_duration">Clip length</string>
+    <string name="pref_description_clip_duration">Length of each loop recording segment</string>
+
+    <string name="pref_title_storage_quota">Storage limit (loop recording)</string>
+    <string name="pref_description_storage_quota">Maximum space used for recordings. When full, the
+        oldest non-saved clips are automatically deleted to make room for new ones.</string>
+
+    <!-- Safety category -->
+    <string name="pref_category_safety">Safety</string>
+
+    <string name="pref_title_overheat_alert">Overheating alert</string>
+    <string name="pref_description_overheat_alert">Warn me when the phone battery gets too hot</string>
+
+    <string name="pref_title_overheat_threshold">Overheating temperature</string>
+    <string name="pref_description_overheat_threshold">Show the warning at or above this battery
+        temperature</string>
+
+    <string name="pref_title_low_battery_shutdown">Auto shutdown on low battery</string>
+    <string name="pref_description_low_battery_shutdown">Safely stop recording and quit the app when
+        the battery gets low and the phone is not charging</string>
+
+    <string name="pref_title_low_battery_threshold">Low battery level</string>
+    <string name="pref_description_low_battery_threshold">Shut down at or below this battery
+        level</string>
+
+    <!-- Safety notifications / messages -->
+    <string name="warning_channel_name">Warnings</string>
+    <string name="overheat_warning_title">Phone overheating</string>
+    <string name="overheat_warning_text">Battery temperature is %1$d\u00B0C. Consider cooling the
+        phone or stopping recording to protect battery health.</string>
+    <string name="low_battery_shutdown_message">Battery low (%1$d%%) and not charging. Saving the
+        current clip and shutting down Open Dash Cam.</string>
     <string name="title_activity_welcome">WelcomeActivity</string>
 
-    <string name="recordings_list_empty_message_title">No video recordings yet</string>
-    <string name="recordings_list_empty_message">New videos get recorded continuously every 45 seconds, so you should see one here soon.</string>
+    <string name="recordings_list_empty_message_title">No recordings yet</string>
+    <string name="recordings_list_empty_message">Start a drive to record your first clip.</string>
+    <string name="title_activity_view_recordings">Recordings</string>
 
     <string name="notification_title">Open Dash Cam recording</string>
     <string name="notification_text">Video recording in progress</string>

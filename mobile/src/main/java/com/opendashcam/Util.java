@@ -13,10 +13,13 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.CountDownTimer;
 import android.os.Environment;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.content.LocalBroadcastManager;
-import android.support.v4.os.EnvironmentCompat;
+import android.content.SharedPreferences;
+import android.media.CamcorderProfile;
+import android.preference.PreferenceManager;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.core.os.EnvironmentCompat;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
@@ -24,8 +27,12 @@ import android.widget.Toast;
 import com.opendashcam.models.Recording;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Global utility methods
@@ -38,9 +45,106 @@ public final class Util {
     private static final String NOTIFICATIONS_CHANNEL_ID_MAIN_NOTIFICATIONS = "1001";
     private static final String NOTIFICATIONS_CHANNEL_NAME_MAIN_NOTIFICATIONS = "Main notifications";
 
-    private static int QUOTA = 1000; // megabytes
-    private static int QUOTA_WARNING_THRESHOLD = 200; // megabytes
-    private static int MAX_DURATION = 45000; // 45 seconds
+    private static final String WARNING_CHANNEL_ID = "1002";
+    private static final int WARNING_NOTIFICATION_ID = 51299;
+
+    // Default values (used if the corresponding preference is not set)
+    private static final int DEFAULT_QUOTA_MB = 1000;
+    private static final int DEFAULT_CLIP_DURATION_SEC = 300;
+    private static final int DEFAULT_OVERHEAT_THRESHOLD_C = 45;
+    private static final int DEFAULT_LOW_BATTERY_THRESHOLD_PCT = 15;
+
+    private static SharedPreferences getPrefs() {
+        return PreferenceManager.getDefaultSharedPreferences(OpenDashApp.getAppContext());
+    }
+
+    /**
+     * Reads an integer preference that is stored as a String (e.g. from a ListPreference),
+     * falling back to a default if unset or malformed.
+     */
+    private static int getIntPref(String key, int defaultValue) {
+        try {
+            return Integer.parseInt(getPrefs().getString(key, String.valueOf(defaultValue)));
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    /**
+     * Storage limit for recordings, in megabytes. When exceeded, the oldest non-starred
+     * clips are deleted (loop recording).
+     */
+    public static int getQuota() {
+        return getIntPref("storage_quota_mb", DEFAULT_QUOTA_MB);
+    }
+
+    /**
+     * Threshold (in MB) at which the user is warned that space is running low. Roughly 20%
+     * of the configured quota, with a small floor.
+     */
+    public static int getQuotaWarningThreshold() {
+        return Math.max(50, getQuota() / 5);
+    }
+
+    /**
+     * Length of each loop recording clip, in milliseconds.
+     */
+    public static int getMaxDuration() {
+        return getIntPref("clip_duration_sec", DEFAULT_CLIP_DURATION_SEC) * 1000;
+    }
+
+    /**
+     * Whether the overheating alert is enabled.
+     */
+    public static boolean isOverheatAlertEnabled() {
+        return getPrefs().getBoolean("enable_overheat_alert", true);
+    }
+
+    /**
+     * Battery temperature (in Celsius) at or above which the overheating alert fires.
+     */
+    public static int getOverheatThreshold() {
+        return getIntPref("overheat_threshold_c", DEFAULT_OVERHEAT_THRESHOLD_C);
+    }
+
+    /**
+     * Whether the app should safely shut down when the battery gets low and is not charging.
+     */
+    public static boolean isLowBatteryShutdownEnabled() {
+        return getPrefs().getBoolean("enable_low_battery_shutdown", false);
+    }
+
+    /**
+     * Battery level (percent) at or below which the app shuts down (when not charging).
+     */
+    public static int getLowBatteryThreshold() {
+        return getIntPref("low_battery_threshold_pct", DEFAULT_LOW_BATTERY_THRESHOLD_PCT);
+    }
+
+    /**
+     * Preferred vertical video resolution (720 or 1080). Defaults to 1080.
+     */
+    public static int getVideoResolution() {
+        return getIntPref("video_resolution", 1080);
+    }
+
+    /**
+     * Maps the resolution preference to a supported CamcorderProfile quality, degrading
+     * gracefully if the requested profile is unavailable on the device.
+     */
+    public static int getVideoQuality() {
+        int res = getVideoResolution();
+        if (res >= 1080 && CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_1080P)) {
+            return CamcorderProfile.QUALITY_1080P;
+        }
+        if (CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_720P)) {
+            return CamcorderProfile.QUALITY_720P;
+        }
+        if (CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_480P)) {
+            return CamcorderProfile.QUALITY_480P;
+        }
+        return CamcorderProfile.QUALITY_HIGH;
+    }
 
     public static File getVideosDirectoryPath() {
         //remove an old directory if exists
@@ -57,18 +161,6 @@ public final class Util {
         }
 
         return null;
-    }
-
-    public static int getQuota() {
-        return QUOTA;
-    }
-
-    public static int getQuotaWarningThreshold() {
-        return QUOTA_WARNING_THRESHOLD;
-    }
-
-    public static int getMaxDuration() {
-        return MAX_DURATION;
     }
 
     /**
@@ -131,15 +223,23 @@ public final class Util {
      * @return size of a directory in megabytes
      */
     public static long getFolderSize(File file) {
+        return getFolderSizeBytes(file) / (1024 * 1024);
+    }
+
+    private static long getFolderSizeBytes(File file) {
+        if (file == null || !file.exists()) return 0;
         long size = 0;
         if (file.isDirectory()) {
-            for (File fileInDirectory : file.listFiles()) {
-                size += getFolderSize(fileInDirectory);
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File fileInDirectory : files) {
+                    size += getFolderSizeBytes(fileInDirectory);
+                }
             }
         } else {
             size = file.length();
         }
-        return size / 1024;
+        return size;
     }
 
     /**
@@ -193,6 +293,86 @@ public final class Util {
         LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
                 new Intent(ACTION_UPDATE_RECORDINGS_LIST)
         );
+    }
+
+    /**
+     * Returns every recorded clip under the recordings directory (recursively across the
+     * dated/hourly folders).
+     */
+    public static List<File> getAllRecordings() {
+        List<File> out = new ArrayList<>();
+        collectRecordings(getVideosDirectoryPath(), out);
+        return out;
+    }
+
+    private static void collectRecordings(File dir, List<File> out) {
+        if (dir == null) return;
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                collectRecordings(f, out);
+            } else if (f.getName().endsWith(".mp4")) {
+                out.add(f);
+            }
+        }
+    }
+
+    /**
+     * Broadcasts that the set of recordings changed so any open UI refreshes.
+     */
+    public static void broadcastRecordingsChanged() {
+        LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
+                new Intent(ACTION_UPDATE_RECORDINGS_LIST)
+        );
+    }
+
+    // --- In-memory event log for the Live view ---
+
+    private static final int MAX_EVENTS = 100;
+    private static final ArrayDeque<String> sEventLog = new ArrayDeque<>();
+    private static final SimpleDateFormat EVENT_TIME_FMT = new SimpleDateFormat("HH:mm:ss", Locale.US);
+
+    /**
+     * Appends a timestamped line to the rolling event log shown in the Live view.
+     */
+    public static synchronized void logEvent(String message) {
+        sEventLog.addFirst(EVENT_TIME_FMT.format(new Date()) + "   " + message);
+        while (sEventLog.size() > MAX_EVENTS) {
+            sEventLog.removeLast();
+        }
+    }
+
+    /**
+     * Returns a snapshot of the event log, newest first.
+     */
+    public static synchronized List<String> getEventLog() {
+        return new ArrayList<>(sEventLog);
+    }
+
+    /**
+     * Deletes a recording file, or an entire folder of recordings (recursively), cleaning up the
+     * database and star entries for each removed clip. Does not broadcast; the caller should
+     * refresh the UI afterwards.
+     *
+     * @param file File or directory to delete
+     */
+    public static void deleteRecordingFileOrFolder(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecordingFileOrFolder(child);
+                }
+            }
+            file.delete();
+        } else {
+            DBHelper.getInstance(OpenDashApp.getAppContext()).deleteRecording(
+                    new Recording(file.getAbsolutePath())
+            );
+            file.delete();
+        }
     }
 
     /**
@@ -313,6 +493,41 @@ public final class Util {
     }
 
     /**
+     * Show (or update) a high-priority warning notification, e.g. for overheating.
+     *
+     * @param context Context
+     * @param title   Notification title
+     * @param text    Notification body
+     */
+    public static void showWarningNotification(Context context, String title, String text) {
+        NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notificationManager != null) {
+            NotificationChannel channel = new NotificationChannel(
+                    WARNING_CHANNEL_ID,
+                    context.getResources().getString(R.string.warning_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            notificationManager.createNotificationChannel(channel);
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(
+                context,
+                WARNING_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+                .setSmallIcon(R.drawable.ic_videocam_red_128dp)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true);
+
+        if (notificationManager != null) {
+            notificationManager.notify(WARNING_NOTIFICATION_ID, builder.build());
+        }
+    }
+
+    /**
      * Get path to app-private folder (Android/data/[app name]/files)
      *
      * @param context Context
@@ -391,24 +606,23 @@ public final class Util {
         protected Boolean doInBackground(Void... voids) {
             DBHelper dbHelper = DBHelper.getInstance(OpenDashApp.getAppContext());
 
-            //select all saved recordings for removing files from storage
-            ArrayList<Recording> recordingsList = dbHelper.selectAllRecordingsList();
+            //remove all items from the SQLite database (recordings + stars)
+            dbHelper.deleteAllRecordings();
 
-            //remove items from SQLite database
-            boolean result = dbHelper.deleteAllRecordings();
-
-            if (result) {
-                File videoFile;
-                //remove files from storage
-                for (Recording recording : recordingsList) {
-                    videoFile = !TextUtils.isEmpty(recording.getFilePath()) ? new File(recording.getFilePath()) : null;
-                    if (videoFile != null) {
-                        videoFile.delete();
+            // Recursively remove every file and dated/hourly folder under the recordings directory
+            File videosDir = getVideosDirectoryPath();
+            boolean anythingRemoved = false;
+            if (videosDir != null && videosDir.isDirectory()) {
+                File[] children = videosDir.listFiles();
+                if (children != null) {
+                    for (File child : children) {
+                        deleteRecordingFileOrFolder(child);
+                        anythingRemoved = true;
                     }
                 }
             }
 
-            return result;
+            return anythingRemoved;
         }
 
         @Override
@@ -421,6 +635,8 @@ public final class Util {
                             ? res.getString(R.string.pref_delete_recordings_confirmation)
                             : res.getString(R.string.recordings_list_empty_message_title)
             );
+            // Refresh any open recordings screen
+            broadcastRecordingsChanged();
         }
     }
 

@@ -5,4 +5,6 @@
     <color name="colorAccent">#FF4081</color>
     <color name="colorTextPrimary">#212121</color>
     <color name="colorTextSecondary">#727272</color>
+    <color name="colorSelected">#D6E4FF</color>
+    <color name="colorSegmentSelected">#1976D2</color>
 </resources>

@@ -12,7 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import android.support.v4.app.ActivityCompat;
+import androidx.core.app.ActivityCompat;
 import android.text.TextUtils;
 import android.widget.Toast;
 
@@ -27,11 +27,26 @@ public class MainActivity extends Activity {
     private static final int CODE_REQUEST_PERMISSION_TO_MUTE_SYSTEM_SOUND = 10001;
     private static final int CODE_REQUEST_PERMISSION_DRAW_OVER_APPS = 10002;
 
-    String[] permissions = new String[]{
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            Manifest.permission.READ_EXTERNAL_STORAGE};
+    /**
+     * Builds the list of runtime permissions to request, adapting to the Android version.
+     * Camera and microphone are always required; legacy storage is only requested on old
+     * versions, and notification permission only on Android 13+.
+     */
+    private String[] getRequiredPermissions() {
+        List<String> perms = new ArrayList<>();
+        perms.add(Manifest.permission.CAMERA);
+        perms.add(Manifest.permission.RECORD_AUDIO);
+        // Legacy external storage write is only used (and grantable) up to Android 9 (API 28);
+        // newer versions use app-specific storage which needs no permission.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+        // Runtime notification permission was introduced in Android 13 (API 33).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        return perms.toArray(new String[0]);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -149,17 +164,16 @@ public class MainActivity extends Activity {
 
 
     private boolean checkPermissions() {
-        int result;
         List<String> listPermissionsNeeded = new ArrayList<>();
-        for (String p : permissions) {
-            result = ActivityCompat.checkSelfPermission(MainActivity.this, p);
-            if (result != PackageManager.PERMISSION_GRANTED) {
+        for (String p : getRequiredPermissions()) {
+            if (ActivityCompat.checkSelfPermission(MainActivity.this, p)
+                    != PackageManager.PERMISSION_GRANTED) {
                 listPermissionsNeeded.add(p);
             }
         }
         if (!listPermissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this,
-                    listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]),
+                    listPermissionsNeeded.toArray(new String[0]),
                     MULTIPLE_PERMISSIONS_RESPONSE_CODE);
             return false;
         }
@@ -199,13 +213,25 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         switch (requestCode) {
-            case MULTIPLE_PERMISSIONS_RESPONSE_CODE:{
-                if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED){
+            case MULTIPLE_PERMISSIONS_RESPONSE_CODE: {
+                // Only camera and microphone are mandatory. Denying notifications or legacy
+                // storage should not prevent the dash cam from starting.
+                boolean essentialGranted = true;
+                for (int i = 0; i < permissions.length && i < grantResults.length; i++) {
+                    boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                    if (!granted
+                            && (Manifest.permission.CAMERA.equals(permissions[i])
+                            || Manifest.permission.RECORD_AUDIO.equals(permissions[i]))) {
+                        essentialGranted = false;
+                    }
+                }
+
+                if (essentialGranted) {
                     // permissions granted
                     startApp();
                 } else {
-                    // permissions not granted
-                    Toast.makeText(MainActivity.this, "Permissions denied. The app cannot start.", Toast.LENGTH_LONG)
+                    // essential permissions not granted
+                    Toast.makeText(MainActivity.this, "Camera and microphone permissions are required. The app cannot start.", Toast.LENGTH_LONG)
                             .show();
 
                     Toast.makeText(MainActivity.this, "Please re-start Open Dash Cam app and grant the requested permissions.", Toast.LENGTH_LONG)

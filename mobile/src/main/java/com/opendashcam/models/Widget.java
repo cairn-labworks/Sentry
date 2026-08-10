@@ -6,14 +6,20 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 
 import com.opendashcam.BackgroundVideoRecorder;
+import com.opendashcam.LiveViewActivity;
 import com.opendashcam.R;
 import com.opendashcam.SettingsActivity;
 import com.opendashcam.Util;
@@ -95,11 +101,27 @@ public class Widget {
         View rootViewMenu;
         View viewRecView;
         View saveRecView;
+        View liveViewView;
         View recView;
         View settingsView;
         View stopAndQuitView;
         View layoutMenu;
         boolean areSecondaryWidgetsShown = false;
+
+        // Drag state for moving the REC widget up/down
+        private float mInitialTouchY;
+        private int mInitialParamsY;
+        private boolean mIsDragging;
+        private boolean mLongPressReady;
+        private int mTouchSlop;
+        private final Handler mDragHandler = new Handler(Looper.getMainLooper());
+        private final Runnable mLongPressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                mLongPressReady = true;
+                recView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            }
+        };
 
         WidgetViewHolder(Context context) {
 
@@ -109,75 +131,140 @@ public class Widget {
             rootViewMenu = LayoutInflater.from(context).inflate(R.layout.layout_widget_menu, null);
             viewRecView = rootViewMenu.findViewById(R.id.view_recordings_button);
             saveRecView = rootViewMenu.findViewById(R.id.save_recording_button);
+            liveViewView = rootViewMenu.findViewById(R.id.live_view_button);
             settingsView = rootViewMenu.findViewById(R.id.settings_button);
             stopAndQuitView = rootViewMenu.findViewById(R.id.stop_and_quit_button);
             layoutMenu = rootViewMenu.findViewById(R.id.layout_menu);
 
             viewRecView.setOnClickListener(this);
             saveRecView.setOnClickListener(this);
-            recView.setOnClickListener(this);
+            liveViewView.setOnClickListener(this);
             settingsView.setOnClickListener(this);
             stopAndQuitView.setOnClickListener(this);
+
+            // The REC button supports both tap (toggle menu) and long-press-drag (reposition)
+            setupDragOnRecButton(context);
+
             hideSecondaryWidgets();
+        }
+
+        /**
+         * Enables repositioning the REC widget vertically: long-press to pick it up (with a
+         * haptic cue), then drag up/down. A simple tap (no drag) still toggles the menu.
+         */
+        private void setupDragOnRecButton(final Context context) {
+            mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+            final int screenHeight = context.getResources().getDisplayMetrics().heightPixels;
+
+            recView.setOnTouchListener(new View.OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            mInitialTouchY = event.getRawY();
+                            mInitialParamsY = layoutParams.y;
+                            mIsDragging = false;
+                            mLongPressReady = false;
+                            mDragHandler.postDelayed(mLongPressRunnable, 350);
+                            return true;
+                        case MotionEvent.ACTION_MOVE: {
+                            float dy = event.getRawY() - mInitialTouchY;
+                            if (!mIsDragging) {
+                                if (mLongPressReady && Math.abs(dy) > mTouchSlop) {
+                                    mIsDragging = true;
+                                } else if (!mLongPressReady && Math.abs(dy) > mTouchSlop) {
+                                    // Moved before the long-press fired: treat as a scroll, not a drag
+                                    mDragHandler.removeCallbacks(mLongPressRunnable);
+                                }
+                            }
+                            if (mIsDragging) {
+                                int newY = mInitialParamsY + (int) dy;
+                                int limit = screenHeight / 2;
+                                if (newY > limit) newY = limit;
+                                if (newY < -limit) newY = -limit;
+                                layoutParams.y = newY;
+                                try {
+                                    windowManager.updateViewLayout(rootView, layoutParams);
+                                    windowManager.updateViewLayout(rootViewMenu, layoutParams);
+                                } catch (IllegalArgumentException ignored) {
+                                    // A view may not be attached; ignore
+                                }
+                            }
+                            return true;
+                        }
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            mDragHandler.removeCallbacks(mLongPressRunnable);
+                            boolean wasDragging = mIsDragging;
+                            mIsDragging = false;
+                            mLongPressReady = false;
+                            if (!wasDragging && event.getActionMasked() == MotionEvent.ACTION_UP) {
+                                // A tap (not a drag): toggle the menu
+                                toggleSecondaryWidgets();
+                            }
+                            return true;
+                    }
+                    return false;
+                }
+            });
         }
 
         @Override
         public void onClick(View v) {
             int id = v.getId();
-            switch (id) {
-                case R.id.view_recordings_button:
-                    Intent viewRecordingsIntent = new Intent(service, ViewRecordingsActivity.class);
-                    viewRecordingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
-                    service.startActivity(viewRecordingsIntent);
-                    hideSecondaryWidgets();
-                    break;
-                case R.id.save_recording_button:
-                    // Access shared references file
-                    SharedPreferences sharedPref = service.getApplicationContext().getSharedPreferences(
-                            service.getString(R.string.current_recordings_preferences_key),
-                            Context.MODE_PRIVATE);
+            if (id == R.id.view_recordings_button) {
+                Intent viewRecordingsIntent = new Intent(service, ViewRecordingsActivity.class);
+                viewRecordingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(viewRecordingsIntent);
+                hideSecondaryWidgets();
+            } else if (id == R.id.save_recording_button) {
+                // Access shared references file
+                SharedPreferences sharedPref = service.getApplicationContext().getSharedPreferences(
+                        service.getString(R.string.current_recordings_preferences_key),
+                        Context.MODE_PRIVATE);
 
-                    // Save video that is being recorded now
-                    String currentVideoRecording = sharedPref.
-                            getString(service.getString(R.string.current_recording_preferences_key),
-                                    "null");
+                // Save video that is being recorded now
+                String currentVideoRecording = sharedPref.
+                        getString(service.getString(R.string.current_recording_preferences_key),
+                                "null");
 
-                    if (currentVideoRecording != "null") {
-                        // star current recording
-                        Recording recording = new Recording(currentVideoRecording);
-                        recording.toggleStar(true);
-                    }
+                if (currentVideoRecording != "null") {
+                    // star current recording
+                    Recording recording = new Recording(currentVideoRecording);
+                    recording.toggleStar(true);
+                }
 
-                    // Save the oldest (previous) recording
-                    String previousVideoRecording = sharedPref.
-                            getString(service.getString(R.string.previous_recording_preferences_key),
-                                    "null");
+                // Save the oldest (previous) recording
+                String previousVideoRecording = sharedPref.
+                        getString(service.getString(R.string.previous_recording_preferences_key),
+                                "null");
 
-                    if (previousVideoRecording != "null") {
-                        // star previous recording
-                        Recording recording = new Recording( 0, previousVideoRecording);
-                        recording.toggleStar(true);
-                    }
+                if (previousVideoRecording != "null") {
+                    // star previous recording
+                    Recording recording = new Recording( 0, previousVideoRecording);
+                    recording.toggleStar(true);
+                }
 
-                    // Show success message
-                    Util.showToastLong(service, service.getString(R.string.save_recording_success_msg));
-                    break;
-                case R.id.rec_button:
-                    toggleSecondaryWidgets();
-                    break;
-                case R.id.settings_button:
-                    Intent settingsIntent = new Intent(service, SettingsActivity.class);
-                    settingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
-                    service.startActivity(settingsIntent);
-                    // hide secondary widgets
-                    hideSecondaryWidgets();
-                    break;
-                case R.id.stop_and_quit_button:
-                    // Stop video recording service
-                    service.stopService(new Intent(service, BackgroundVideoRecorder.class));
-                    // Stop the rootView service
-                    service.stopSelf();
-                    break;
+                // Show success message
+                Util.showToastLong(service, service.getString(R.string.save_recording_success_msg));
+            } else if (id == R.id.rec_button) {
+                toggleSecondaryWidgets();
+            } else if (id == R.id.live_view_button) {
+                Intent liveIntent = new Intent(service, LiveViewActivity.class);
+                liveIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(liveIntent);
+                hideSecondaryWidgets();
+            } else if (id == R.id.settings_button) {
+                Intent settingsIntent = new Intent(service, SettingsActivity.class);
+                settingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(settingsIntent);
+                // hide secondary widgets
+                hideSecondaryWidgets();
+            } else if (id == R.id.stop_and_quit_button) {
+                // Stop video recording service
+                service.stopService(new Intent(service, BackgroundVideoRecorder.class));
+                // Stop the rootView service
+                service.stopSelf();
             }
         }
 

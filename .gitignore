@@ -11,3 +11,6 @@
 *.properties
 !gradle-wrapper.properties
 !gradle.properties
+
+# Build artifacts
+*.apk
