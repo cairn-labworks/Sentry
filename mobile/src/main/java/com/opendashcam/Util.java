@@ -181,6 +181,19 @@ public final class Util {
     }
 
     /**
+     * Whether the mandatory recording permissions (camera, mic, overlay) are granted.
+     */
+    public static boolean hasRecordingPermissions(Context context) {
+        boolean cam = ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        boolean mic = ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        boolean overlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || android.provider.Settings.canDrawOverlays(context);
+        return cam && mic && overlay;
+    }
+
+    /**
      * Launches Google Maps in driving-navigation mode, if installed.
      */
     private static void launchNavigation(Context app) {

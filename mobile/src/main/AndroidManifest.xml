@@ -49,6 +49,15 @@
             android:exported="false"
             android:foregroundServiceType="camera|microphone" />
 
+        <receiver
+            android:name=".PowerConnectionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".ViewRecordingsActivity"
             android:exported="false"

@@ -126,6 +126,16 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupGeneral() {
+        SwitchMaterial autostart = findViewById(R.id.switch_autostart);
+        autostart.setChecked(prefs.getBoolean("auto_start_on_charge", false));
+        autostart.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("auto_start_on_charge", checked).apply());
+
+        SwitchMaterial autostop = findViewById(R.id.switch_autostop);
+        autostop.setChecked(prefs.getBoolean("auto_stop_on_discharge", false));
+        autostop.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("auto_stop_on_discharge", checked).apply());
+
         SwitchMaterial silent = findViewById(R.id.switch_silent);
         silent.setChecked(prefs.getBoolean("disable_sound", true));
         silent.setOnCheckedChangeListener((b, checked) ->
@@ -188,7 +198,9 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void styleSegment(TextView seg, boolean selected) {
         seg.setBackgroundResource(selected ? R.drawable.seg_selected : R.drawable.seg_unselected);
-        seg.setTextColor(selected ? 0xFFFFFFFF : 0xFF37474F);
+        seg.setTextColor(selected
+                ? 0xFFFFFFFF
+                : getResources().getColor(R.color.segUnselText));
         seg.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
     }
 

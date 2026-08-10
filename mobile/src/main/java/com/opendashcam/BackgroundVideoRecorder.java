@@ -4,8 +4,11 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
+import android.location.Location;
+import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
@@ -23,6 +26,8 @@ import android.view.Gravity;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+
+import androidx.core.content.ContextCompat;
 
 import com.opendashcam.models.Recording;
 
@@ -214,6 +219,17 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
         editor.apply();
 
         mediaRecorder.setOutputFile(currentVideoFile);
+
+        // Embed GPS location into the clip's metadata when available (safe if location is off/denied)
+        Location loc = getLastKnownLocationSafe();
+        if (loc != null) {
+            try {
+                mediaRecorder.setLocation((float) loc.getLatitude(), (float) loc.getLongitude());
+            } catch (Exception ignored) {
+                // setLocation is best-effort
+            }
+        }
+
         Util.logEvent("New clip: " + new File(currentVideoFile).getName());
         mediaRecorder.setMaxDuration(Util.getMaxDuration());
 
@@ -243,6 +259,34 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
                 }
             }
         });
+    }
+
+    /**
+     * Returns the most recent known location, or null if location is off, unavailable, or the
+     * permission has not been granted. Fully guarded so it never throws.
+     */
+    private Location getLastKnownLocationSafe() {
+        try {
+            boolean fine = ContextCompat.checkSelfPermission(this,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            boolean coarse = ContextCompat.checkSelfPermission(this,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            if (!fine && !coarse) return null;
+
+            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            if (lm == null) return null;
+
+            Location best = null;
+            for (String provider : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(provider);
+                if (l != null && (best == null || l.getTime() > best.getTime())) {
+                    best = l;
+                }
+            }
+            return best;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Stop recording and remove SurfaceView

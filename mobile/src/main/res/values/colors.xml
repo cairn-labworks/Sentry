@@ -7,4 +7,13 @@
     <color name="colorTextSecondary">#727272</color>
     <color name="colorSelected">#D6E4FF</color>
     <color name="colorSegmentSelected">#1976D2</color>
+
+    <!-- Semantic surfaces (overridden in values-night) -->
+    <color name="colorWindowBg">#FFF7F8FA</color>
+    <color name="colorCard">#FFFFFFFF</color>
+    <color name="colorCardAlt">#FFF5F6F8</color>
+    <color name="colorDivider">#FFEEEEEE</color>
+    <color name="segUnselBg">#FFEDEFF3</color>
+    <color name="segUnselStroke">#FFCFD8DC</color>
+    <color name="segUnselText">#FF37474F</color>
 </resources>

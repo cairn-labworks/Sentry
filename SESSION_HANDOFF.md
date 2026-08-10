@@ -147,17 +147,29 @@ Recordings are stored under the app-private external `Movies` folder and organiz
 
 ## 7. Possible next steps / open items
 
-- Camera2/CameraX migration (enables reliable screen-off recording + a true live camera preview).
-- Front camera support / frame-rate option (screenshots showed these; not implemented).
-- GPS/speed **overlay burned into the video** (currently HUD-only) + optional watermark/timestamp.
-- G-Sensor (accelerometer) impact auto-lock of the current clip (screenshot showed a "G-Sensor" toggle).
-- "Exported" tab / share/export flow (screenshot showed an Exported tab; only All/Starred implemented).
-- Commit + push the branch; optionally add a GitHub Actions workflow to build signed APKs in CI.
-- Consider `.gitignore` for `*.apk` if you don't want the binary committed.
+- **Visual burn-in of timestamp/GPS into the video frames** (see note below) — needs Camera2/CameraX
+  + GLES/MediaCodec pipeline. Currently GPS is embedded as **MP4 metadata** and time is in the
+  filename/mtime/creation-time; the Live HUD shows both live, but they are NOT painted into the pixels yet.
+- Front camera support / frame-rate option.
+- G-Sensor (accelerometer) impact auto-lock of the current clip.
+- "Exported" tab / share/export flow.
+- Consider migrating capture to Camera2/CameraX (reliable screen-off + live preview + burn-in).
+
+## 8. Round 5 additions (this session)
+
+- **Dark mode**: Material **DayNight** theme + `values-night/colors.xml`; semantic colors
+  (`colorWindowBg/colorCard/colorCardAlt/colorDivider/segUnsel*`); `AppCompatDelegate` follows system.
+- **Auto-start on charge** and **auto-stop on unplug**: Settings "Automation" toggles
+  (`auto_start_on_charge`, `auto_stop_on_discharge`) + `PowerConnectionReceiver` (manifest) reacting to
+  `ACTION_POWER_CONNECTED/DISCONNECTED`. Auto-start relies on the overlay-permission exemption for
+  background FGS starts; wrapped in try/catch + logged. **Needs on-device verification per OEM.**
+- **Location-off safety**: all location access guarded (`BackgroundVideoRecorder.getLastKnownLocationSafe`,
+  LiveView try/catch) so disabled/denied location never crashes recording or the HUD.
+- **Location/time metadata**: `MediaRecorder.setLocation()` embeds GPS into each clip when available.
 
 ---
 
-## 8. Prompt to bootstrap the new session
+## 9. Prompt to bootstrap the new session
 
 > "Continue work on the Open Dash Cam Android app (branch
 > dashcam-app-usage-guide-android13). Read SESSION_HANDOFF.md in the repo root for full context.

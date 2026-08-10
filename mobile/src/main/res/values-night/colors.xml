@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme overrides -->
+    <color name="colorTextPrimary">#FFECECEC</color>
+    <color name="colorTextSecondary">#FFB0B0B0</color>
+    <color name="colorSelected">#FF2A3A57</color>
+
+    <color name="colorWindowBg">#FF121212</color>
+    <color name="colorCard">#FF1E1E1E</color>
+    <color name="colorCardAlt">#FF262626</color>
+    <color name="colorDivider">#FF2C2C2C</color>
+    <color name="segUnselBg">#FF2A2A2A</color>
+    <color name="segUnselStroke">#FF3A3A3A</color>
+    <color name="segUnselText">#FFCFCFCF</color>
+</resources>
