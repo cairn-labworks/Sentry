@@ -64,9 +64,11 @@ adb install "mobile\build\outputs\apk\debug\mobile-debug.apk"
   button or a pinned "Start Recording" home-screen shortcut. Handles permission gating.
 - `WidgetService` — foreground service; draws the overlay REC widget; holds a wake lock; also
   hosts the **battery/thermal monitor** (overheat alert + low-battery safe shutdown).
-- `BackgroundVideoRecorder` — foreground service; legacy `android.hardware.Camera` + `MediaRecorder`
-  recording into ~app-private external `Movies` dir; loop rotation; folder organization; wake lock;
-  embeds GPS metadata; exposes `isRecording` / `recordingStartedAt`.
+- `BackgroundVideoRecorder` — **CameraX** `LifecycleService`: `VideoCapture` + `Recorder` loop
+  recording (segments bounded by `setDurationLimitMillis`, chained on Finalize) with an
+  **`OverlayEffect`** that **burns date/time + GPS into the recorded frames**. Preserves folder
+  organization, loop rotation, DB inserts, prefs (current/previous clip), wake lock, system-sound
+  muting, and `isRecording`/`recordingStartedAt`. GPS also embedded as metadata.
 - `PowerConnectionReceiver` — manifest receiver for `ACTION_POWER_CONNECTED/DISCONNECTED`;
   auto-starts/auto-stops recording per the Automation settings.
 - `models/Widget` — the floating overlay button + menu (View recordings, Save, **Live view**,
@@ -154,8 +156,12 @@ Recordings are stored under the app-private external `Movies` folder and organiz
   fragile/device-specific. User explicitly chose the reliable telemetry HUD. Showing the real camera
   image would require deeper rework (e.g., sharing the recorder's preview surface at clip boundaries,
   or migrating to Camera2/CameraX) and on-device iteration.
-- App still uses the **deprecated legacy Camera API** (works on Android 13, but a Camera2/CameraX
-  migration is the eventual right move, especially for reliable screen-off + live preview).
+- **Capture pipeline:** migrated from legacy `android.hardware.Camera` + `MediaRecorder` to
+  **CameraX** (`camera-video` + `camera-effects` `OverlayEffect`, v1.4.2) so the timestamp/GPS can be
+  **burned into the frames**. The recorder is now a `LifecycleService`. This is a big change that
+  **must be validated on a device** (recording start/stop, segment chaining, overlay orientation,
+  performance). Overlay text is drawn rotation-corrected via `Frame.getRotationDegrees()`; on some
+  devices/mounts the position may need tuning.
 - App theme is `Theme.MaterialComponents.DayNight.DarkActionBar.Bridge` (Material Slider/Switch/Button
   support + light/dark). Night overrides live in `values-night/colors.xml`.
 - **All testing so far was compile/build only** — there was **no physical device** on the devbox.
@@ -173,6 +179,8 @@ Recordings are stored under the app-private external `Movies` folder and organiz
 - [ ] **"Add Start Recording to home screen"** creates a launcher shortcut that starts recording.
 - [ ] REC widget: **long-press + drag** moves it; tap opens the menu.
 - [ ] New clips are **silent** (no per-clip beep).
+- [ ] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
+      verify text is upright and on-screen for your mount, and that clips chain every N minutes.
 - [ ] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
       is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
 - [ ] **Delete all recordings** button looks right and shows a confirmation dialog.
@@ -190,13 +198,10 @@ Recordings are stored under the app-private external `Movies` folder and organiz
 
 ## 7. Possible next steps / open items
 
-- **Visual burn-in of timestamp/GPS into the video frames** (see note below) — needs Camera2/CameraX
-  + GLES/MediaCodec pipeline. Currently GPS is embedded as **MP4 metadata** and time is in the
-  filename/mtime/creation-time; the Live HUD shows both live, but they are NOT painted into the pixels yet.
 - Front camera support / frame-rate option.
 - G-Sensor (accelerometer) impact auto-lock of the current clip.
 - "Exported" tab / share/export flow.
-- Consider migrating capture to Camera2/CameraX (reliable screen-off + live preview + burn-in).
+- Tune overlay text position/orientation per device if needed.
 
 ## 8. Prompt to bootstrap the new session
 

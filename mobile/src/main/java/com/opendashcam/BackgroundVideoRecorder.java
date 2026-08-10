@@ -1,35 +1,50 @@
 package com.opendashcam;
 
-import android.app.Service;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.PixelFormat;
-import android.hardware.Camera;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.media.AudioManager;
-import android.media.CamcorderProfile;
-import android.media.MediaRecorder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.text.format.DateFormat;
-import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.Gravity;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
-import android.view.WindowManager;
+import android.util.Size;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.arch.core.util.Function;
+import androidx.camera.core.CameraEffect;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.UseCaseGroup;
+import androidx.camera.effects.Frame;
+import androidx.camera.effects.OverlayEffect;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.FallbackStrategy;
+import androidx.camera.video.FileOutputOptions;
+import androidx.camera.video.PendingRecording;
+import androidx.camera.video.Quality;
+import androidx.camera.video.QualitySelector;
+import androidx.camera.video.Recorder;
+import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
 import androidx.core.content.ContextCompat;
+import androidx.lifecycle.LifecycleService;
 
-import com.opendashcam.models.Recording;
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -41,315 +56,372 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Background video recording service.
- * Inspired by
- * https://stackoverflow.com/questions/15049041/background-video-recording-in-android-4-0
- * https://stackoverflow.com/questions/21264592/android-split-video-during-capture
- * Parts contributed by Toshio Azuma
+ * Background video recording service, built on CameraX.
+ *
+ * Uses {@link VideoCapture} + {@link Recorder} for loop recording (each segment is bounded by a
+ * duration limit and the next one starts on finalize), and {@link OverlayEffect} to burn the
+ * current date/time and GPS location directly into the recorded frames.
  */
-public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Callback {
-    private WindowManager windowManager;
-    private SurfaceView surfaceView;
-    private volatile Camera camera = null;
-    private volatile MediaRecorder mediaRecorder = null;
-    private String currentVideoFile = "null";
-    private SharedPreferences sharedPref;
-    private HandlerThread thread;
-    private Handler backgroundThread;
-    private SharedPreferences settings;
-    private SharedPreferences.Editor editor;
-    private Handler mainThread = new Handler(Looper.getMainLooper());
-    private File mRecordingsDirectory;
-    private PowerManager.WakeLock mWakeLock;
+public class BackgroundVideoRecorder extends LifecycleService {
+
+    private static final String TAG = "DashCamRecorder";
 
     /** Whether the background recorder is currently active (read by the Live view). */
     public static volatile boolean isRecording = false;
     /** When the current recording session started (millis), for elapsed display. */
     public static volatile long recordingStartedAt = 0L;
 
+    private SharedPreferences sharedPref;
+    private SharedPreferences settings;
+    private SharedPreferences.Editor editor;
+
+    private File mRecordingsDirectory;
+    private String currentVideoFile = "null";
+
+    private PowerManager.WakeLock mWakeLock;
+
+    private ProcessCameraProvider mCameraProvider;
+    private Recorder mRecorder;
+    private VideoCapture<Recorder> mVideoCapture;
+    private OverlayEffect mOverlayEffect;
+    private androidx.camera.video.Recording mActiveRecording;
+
+    private HandlerThread mGlThread;
+    private Handler mGlHandler;
+
+    private volatile boolean mStopping = false;
+
+    // Cached location for the burned-in overlay (updated by the location listener)
+    private LocationManager mLocationManager;
+    private volatile boolean mHasLocation = false;
+    private volatile double mLat = 0, mLng = 0;
+    private volatile float mSpeedKmh = 0;
+
+    private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    private final LocationListener mLocationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(@NonNull Location location) {
+            mLat = location.getLatitude();
+            mLng = location.getLongitude();
+            mSpeedKmh = location.hasSpeed() ? location.getSpeed() * 3.6f : 0f;
+            mHasLocation = true;
+        }
+
+        @Override
+        public void onProviderEnabled(@NonNull String provider) {
+        }
+
+        @Override
+        public void onProviderDisabled(@NonNull String provider) {
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+    };
+
     @Override
     public void onCreate() {
-        //long startTime = System.currentTimeMillis();
-        thread = new HandlerThread("io_processor_thread");
-        thread.start();
-        backgroundThread = new Handler(thread.getLooper());
+        super.onCreate();
 
         // Start in foreground to avoid unexpected kill
-        startForeground(
-                Util.FOREGROUND_NOTIFICATION_ID,
-                Util.createStatusBarNotification(this)
-        );
+        startForeground(Util.FOREGROUND_NOTIFICATION_ID, Util.createStatusBarNotification(this));
 
-        // Keep the CPU running so recording continues while the screen is off.
+        // Keep the CPU running so recording continues while the screen is off
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             mWakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "OpenDashCam:RecorderWakeLock"
-            );
+                    PowerManager.PARTIAL_WAKE_LOCK, "OpenDashCam:RecorderWakeLock");
             mWakeLock.acquire();
         }
+
+        sharedPref = getApplicationContext().getSharedPreferences(
+                getString(R.string.current_recordings_preferences_key), Context.MODE_PRIVATE);
+        editor = sharedPref.edit();
+        settings = PreferenceManager.getDefaultSharedPreferences(this);
+
+        // Prepare recordings directory
+        mRecordingsDirectory = Util.getVideosDirectoryPath();
+        if (mRecordingsDirectory != null
+                && (!mRecordingsDirectory.isDirectory() || !mRecordingsDirectory.exists())) {
+            mRecordingsDirectory.mkdirs();
+        }
+
+        disableSound(editor);
+        setupOverlayPaints();
+        startLocationUpdates();
+
+        mGlThread = new HandlerThread("overlay_gl_thread");
+        mGlThread.start();
+        mGlHandler = new Handler(mGlThread.getLooper());
 
         isRecording = true;
         recordingStartedAt = System.currentTimeMillis();
         Util.logEvent("Recording started");
 
-        sharedPref = this.getApplicationContext().getSharedPreferences(
-                getString(R.string.current_recordings_preferences_key),
-                Context.MODE_PRIVATE);
-        editor = sharedPref.edit();
-        settings = PreferenceManager.getDefaultSharedPreferences(this);
-
-        // Create new SurfaceView, set its size to 1x1, move it to the top left corner and set this service as a callback
-        windowManager = (WindowManager) this.getSystemService(Context.WINDOW_SERVICE);
-        surfaceView = new SurfaceView(this);
-
-        int type = WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-
-        WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams(
-                1, 1,
-                type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-        );
-        layoutParams.gravity = Gravity.LEFT | Gravity.TOP;
-        windowManager.addView(surfaceView, layoutParams);
-        surfaceView.getHolder().addCallback(this);
-
-        // Set shutter sound based on preferences
-        disableSound(editor);
-
-        // Create directory for recordings if not exists
-        mRecordingsDirectory = Util.getVideosDirectoryPath();
-        if (!mRecordingsDirectory.isDirectory() || !mRecordingsDirectory.exists()) {
-            mRecordingsDirectory.mkdir();
-        }
-
-        //long elapsedTime = System.currentTimeMillis() - startTime;
-        //Log.i("DEBUG", "onCreate Time: " + (TimeUnit.MILLISECONDS.convert(elapsedTime, TimeUnit.MILLISECONDS)) + " milliseconds");
+        startCamera();
     }
 
-    // Method called right after Surface created (initializing and starting MediaRecorder)
-    @Override
-    public void surfaceCreated(final SurfaceHolder surfaceHolder) {
-        backgroundThread.post(new Runnable() {
+    // --- CameraX setup ---
+
+    private void startCamera() {
+        final ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
+        future.addListener(new Runnable() {
             @Override
             public void run() {
-                // Initialize Media Recorder
-                initMediaRecorder(surfaceHolder);
-
-                // Prepare
                 try {
-                    mediaRecorder.prepare();
-                    mediaRecorder.start();
-                    Log.d("VIDEOCAPTURE", "BackgroundVideoRecorder.run(): start recording");
+                    mCameraProvider = future.get();
+                    bindUseCases();
+                    startNextSegment();
                 } catch (Exception e) {
-                    Log.e("VIDEOCAPTURE", "mediaRecorder.prepare() threw exception for some reason!", e);
+                    Log.e(TAG, "Failed to start CameraX", e);
+                    Util.logEvent("Camera failed to start: " + e.getMessage());
+                    stopSelf();
                 }
             }
-        });
-
+        }, ContextCompat.getMainExecutor(this));
     }
 
-    private void initMediaRecorder(final SurfaceHolder surfaceHolder) {
-        rotateRecordings(BackgroundVideoRecorder.this, Util.getQuota());
-        // Low-priority housekeeping: move clips from finished hours into dated folders
-        organizeRecordings();
-        camera = Camera.open();
-        if (camera != null) {
-            // Silence the per-clip shutter / record-start sound where the device allows it
-            camera.enableShutterSound(false);
-        }
-        Camera.Parameters cameraParams = camera != null ? camera.getParameters() : null;
-        if (camera != null) camera.unlock();
+    private void bindUseCases() {
+        int res = Util.getVideoResolution();
+        Quality quality = (res >= 1080) ? Quality.FHD : Quality.HD;
+        QualitySelector qualitySelector = QualitySelector.from(
+                quality, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
 
-        //define video quality based on the user's resolution preference
-        int videoQuality = Util.getVideoQuality();
+        mRecorder = new Recorder.Builder()
+                .setQualitySelector(qualitySelector)
+                .build();
+        mVideoCapture = VideoCapture.withOutput(mRecorder);
 
-        // Log.d("VIDEOCAPTURE", "BackgroundVideoRecorder.initMediaRecorder(): quality " + videoQuality);
-
-        //create camcorder profile and set optimal video size
-        CamcorderProfile camcorderProfile = CamcorderProfile.get(videoQuality);
-        // For 1080p keep the profile's native 1920x1080; only fit-to-view for lower resolutions
-        if (cameraParams != null && videoQuality != CamcorderProfile.QUALITY_1080P) {
-            List<Camera.Size> previewSizes = cameraParams.getSupportedPreviewSizes();
-            List<Camera.Size> videoSizes = cameraParams.getSupportedVideoSizes();
-            WindowManager window = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-
-            if (window != null && previewSizes != null && videoSizes != null) {
-                DisplayMetrics displayMetrics = new DisplayMetrics();
-                window.getDefaultDisplay().getMetrics(displayMetrics);
-
-                //get and set optimal video size
-                Camera.Size videoSize = Util.getOptimalVideoSize(videoSizes, previewSizes, displayMetrics.widthPixels, displayMetrics.heightPixels);
-                //  Log.d("VIDEOCAPTURE", "BackgroundVideoRecorder.initMediaRecorder(): optimal video size - " + videoSize.width + "x" + videoSize.height);
-
-                camcorderProfile.videoFrameWidth = videoSize.width;
-                camcorderProfile.videoFrameHeight = videoSize.height;
-            }
-        }
-
-        mediaRecorder = new MediaRecorder();
-        mediaRecorder.setCamera(camera); // TODO See if we can remove this line. We can't, because media recorder should know what camera object will be used
-        mediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
-        mediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-        mediaRecorder.setProfile(camcorderProfile);
-        mediaRecorder.setVideoEncodingBitRate(3000000);
-        mediaRecorder.setPreviewDisplay(surfaceHolder.getSurface());
-        // Store previous and current recording filenames, so that they may be retrieved by the
-        // SaveRecording button
-
-        // previous recording = currentVideoFile
-        editor.putString(
-                getString(R.string.previous_recording_preferences_key),
-                currentVideoFile);
-        editor.apply();
-
-        // Path to the file with the recording to be created
-        currentVideoFile = mRecordingsDirectory.getAbsolutePath() + File.separator +
-                DateFormat.format("yyyy-MM-dd_kk-mm-ss", new Date().getTime()) +
-                ".mp4";
-
-        // // current recording = currentVideoFile (after updated)
-        editor.putString(
-                getString(R.string.current_recording_preferences_key),
-                currentVideoFile);
-        editor.apply();
-
-        mediaRecorder.setOutputFile(currentVideoFile);
-
-        // Embed GPS location into the clip's metadata when available (safe if location is off/denied)
-        Location loc = getLastKnownLocationSafe();
-        if (loc != null) {
-            try {
-                mediaRecorder.setLocation((float) loc.getLatitude(), (float) loc.getLongitude());
-            } catch (Exception ignored) {
-                // setLocation is best-effort
-            }
-        }
-
-        Util.logEvent("New clip: " + new File(currentVideoFile).getName());
-        mediaRecorder.setMaxDuration(Util.getMaxDuration());
-
-        // When maximum video length reached
-        mediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
+        mOverlayEffect = new OverlayEffect(
+                CameraEffect.VIDEO_CAPTURE,
+                0,
+                mGlHandler,
+                throwable -> Log.e(TAG, "OverlayEffect error", throwable));
+        mOverlayEffect.setOnDrawListener(new Function<Frame, Boolean>() {
             @Override
-            public void onInfo(MediaRecorder mr, int what, int extra) {
-                if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED && null != mediaRecorder) {
-                    mediaRecorder.setOnInfoListener(null);
-                    Log.d("VIDEOCAPTURE", "Maximum Duration Reached. Stop recording.");
-                    mediaRecorder.stop();
-                    mediaRecorder.reset();
-                    mediaRecorder.release();
-                    mediaRecorder = null;
-                    if (null != camera) {
-                        camera.lock();
-                        camera.release();
-                        camera = null;
-                    }
-
-                    //insert new entry to SQLite
-                    Util.insertNewRecording(
-                            new Recording(currentVideoFile)
-                    );
-
-                    surfaceCreated(surfaceHolder);
-                }
+            public Boolean apply(Frame frame) {
+                drawOverlay(frame);
+                return true;
             }
         });
+
+        UseCaseGroup group = new UseCaseGroup.Builder()
+                .addUseCase(mVideoCapture)
+                .addEffect(mOverlayEffect)
+                .build();
+
+        mCameraProvider.unbindAll();
+        mCameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group);
+    }
+
+    // --- Loop recording (segment chaining) ---
+
+    @SuppressLint("MissingPermission")
+    private void startNextSegment() {
+        if (mStopping || mRecorder == null) return;
+
+        // Housekeeping before each segment
+        rotateRecordings(BackgroundVideoRecorder.this, Util.getQuota());
+        organizeRecordings();
+
+        // Track previous/current filenames for the "Save recording" feature
+        editor.putString(getString(R.string.previous_recording_preferences_key), currentVideoFile);
+        editor.apply();
+
+        currentVideoFile = mRecordingsDirectory.getAbsolutePath() + File.separator
+                + DateFormat.format("yyyy-MM-dd_kk-mm-ss", new Date().getTime()) + ".mp4";
+
+        editor.putString(getString(R.string.current_recording_preferences_key), currentVideoFile);
+        editor.apply();
+
+        File outFile = new File(currentVideoFile);
+        FileOutputOptions outputOptions = new FileOutputOptions.Builder(outFile)
+                .setDurationLimitMillis(Util.getMaxDuration())
+                .build();
+
+        PendingRecording pending = mRecorder.prepareRecording(this, outputOptions);
+        boolean audio = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED;
+        if (audio) {
+            try {
+                pending = pending.withAudioEnabled();
+            } catch (Exception ignored) {
+                // Fall back to video-only if audio can't be enabled
+            }
+        }
+
+        Util.logEvent("New clip: " + outFile.getName());
+
+        mActiveRecording = pending.start(ContextCompat.getMainExecutor(this), event -> {
+            if (event instanceof VideoRecordEvent.Finalize) {
+                onSegmentFinalized((VideoRecordEvent.Finalize) event);
+            }
+        });
+    }
+
+    private void onSegmentFinalized(VideoRecordEvent.Finalize event) {
+        // A duration-limit finalize still produces a valid file
+        Util.insertNewRecording(new com.opendashcam.models.Recording(currentVideoFile));
+
+        if (!mStopping) {
+            startNextSegment();
+        }
+    }
+
+    // --- Burned-in overlay ---
+
+    private void setupOverlayPaints() {
+        mTextPaint.setColor(Color.WHITE);
+        mTextPaint.setShadowLayer(4f, 0f, 0f, Color.BLACK);
+        mBgPaint.setColor(Color.argb(120, 0, 0, 0));
     }
 
     /**
-     * Returns the most recent known location, or null if location is off, unavailable, or the
-     * permission has not been granted. Fully guarded so it never throws.
+     * Draws the timestamp and GPS location onto the frame. Rotating the canvas about the frame
+     * center maps the "upright" logical rect onto the buffer regardless of the frame rotation,
+     * so the text stays readable in the recorded video.
      */
-    private Location getLastKnownLocationSafe() {
+    private void drawOverlay(Frame frame) {
+        Canvas canvas = frame.getOverlayCanvas();
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+
+        Size size = frame.getSize();
+        int w = size.getWidth();
+        int h = size.getHeight();
+        int rot = frame.getRotationDegrees();
+
+        float lw = (rot == 90 || rot == 270) ? h : w;
+        float lh = (rot == 90 || rot == 270) ? w : h;
+        float left = w / 2f - lw / 2f;
+        float right = w / 2f + lw / 2f;
+        float bottom = h / 2f + lh / 2f;
+
+        String line1 = DateFormat.format("yyyy-MM-dd  HH:mm:ss", new Date()).toString();
+        String line2 = mHasLocation
+                ? String.format(Locale.US, "%.5f, %.5f   %.0f km/h", mLat, mLng, mSpeedKmh)
+                : "GPS: acquiring\u2026";
+
+        float textSize = Math.max(24f, lh * 0.03f);
+        mTextPaint.setTextSize(textSize);
+
+        float pad = textSize * 0.5f;
+        float lineGap = textSize * 0.35f;
+        float stripHeight = textSize * 2 + lineGap + pad * 2;
+
+        canvas.save();
+        canvas.rotate(rot, w / 2f, h / 2f);
+
+        // Background strip along the bottom of the upright frame
+        canvas.drawRect(left, bottom - stripHeight, right, bottom, mBgPaint);
+
+        float x = left + pad;
+        float baseline2 = bottom - pad;
+        float baseline1 = baseline2 - textSize - lineGap;
+        canvas.drawText(line1, x, baseline1, mTextPaint);
+        canvas.drawText(line2, x, baseline2, mTextPaint);
+
+        canvas.restore();
+    }
+
+    // --- Location for the overlay ---
+
+    private void startLocationUpdates() {
         try {
             boolean fine = ContextCompat.checkSelfPermission(this,
                     android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
             boolean coarse = ContextCompat.checkSelfPermission(this,
                     android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-            if (!fine && !coarse) return null;
+            if (!fine && !coarse) return;
 
-            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            if (lm == null) return null;
+            mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            if (mLocationManager == null) return;
 
-            Location best = null;
-            for (String provider : lm.getProviders(true)) {
-                Location l = lm.getLastKnownLocation(provider);
-                if (l != null && (best == null || l.getTime() > best.getTime())) {
-                    best = l;
+            // Seed with the last known location so the overlay isn't blank initially
+            for (String provider : mLocationManager.getProviders(true)) {
+                Location last = mLocationManager.getLastKnownLocation(provider);
+                if (last != null) {
+                    mLocationListener.onLocationChanged(last);
                 }
             }
-            return best;
+
+            for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+                try {
+                    if (mLocationManager.isProviderEnabled(provider)) {
+                        mLocationManager.requestLocationUpdates(provider, 1000, 0, mLocationListener, Looper.getMainLooper());
+                    }
+                } catch (Exception ignored) {
+                    // Provider may be unavailable; ignore
+                }
+            }
         } catch (Exception e) {
-            return null;
+            // Location entirely unavailable; overlay will show "acquiring"
         }
     }
 
-    // Stop recording and remove SurfaceView
+    private void stopLocationUpdates() {
+        try {
+            if (mLocationManager != null) mLocationManager.removeUpdates(mLocationListener);
+        } catch (Exception ignored) {
+        }
+    }
+
+    // --- Teardown ---
+
     @Override
     public void onDestroy() {
+        mStopping = true;
         isRecording = false;
         Util.logEvent("Recording stopped");
-        backgroundThread.post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    if (mediaRecorder != null) {
-                        mediaRecorder.stop();
-                        mediaRecorder.reset();
-                        mediaRecorder.release();
-                        mediaRecorder.setOnInfoListener(null);
-                        mediaRecorder = null;
-                    }
-                    if (null != camera) {
-                        camera.lock();
-                        camera.release();
-                        camera = null;
-                    }
-                } catch (RuntimeException e) {
-                    Log.e("DashCam", "BackgroundVideoRecorder.run: RuntimeException - " + e.getLocalizedMessage(), e);
-                }
-                backgroundThread.removeCallbacksAndMessages(null);
-                mainThread.removeCallbacksAndMessages(null);
-                thread.quit();
-                thread = null;
-                backgroundThread = null;
-                mainThread = null;
 
-                //insert new entry to SQLite
-                Util.insertNewRecording(
-                        new Recording(currentVideoFile)
-                );
+        stopLocationUpdates();
 
-                reEnableSound();
+        try {
+            if (mActiveRecording != null) {
+                mActiveRecording.stop();
+                mActiveRecording = null;
             }
-        });
+        } catch (Exception e) {
+            Log.e(TAG, "Error stopping recording", e);
+        }
 
-        windowManager.removeView(surfaceView);
-        stopForeground(true);
+        try {
+            if (mCameraProvider != null) mCameraProvider.unbindAll();
+        } catch (Exception ignored) {
+        }
 
-        // Release the recording wake lock
+        if (mOverlayEffect != null) {
+            try {
+                mOverlayEffect.close();
+            } catch (Exception ignored) {
+            }
+            mOverlayEffect = null;
+        }
+
+        if (mGlThread != null) {
+            mGlThread.quitSafely();
+            mGlThread = null;
+            mGlHandler = null;
+        }
+
+        reEnableSound();
+
         if (mWakeLock != null && mWakeLock.isHeld()) {
             mWakeLock.release();
             mWakeLock = null;
         }
+
+        stopForeground(true);
+        super.onDestroy();
     }
 
-    /**
-     * Removes old recordings to create space for the new ones in order to stay within the
-     * set app quota. Works recursively across the dated/hourly folder structure.
-     *
-     * @param quota Maximum size the recordings directory may reach in megabytes
-     */
+    // --- Storage housekeeping (unchanged behavior) ---
+
     private void rotateRecordings(Context context, int quota) {
         long startTime = System.currentTimeMillis();
-        // Quota exceeded?
         while (Util.getFolderSize(mRecordingsDirectory) >= quota) {
-            // Collect every clip, including those already moved into dated/hourly folders
             List<File> videoFiles = new ArrayList<>();
             collectVideoFiles(mRecordingsDirectory, videoFiles);
 
@@ -357,50 +429,34 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
             int starred_videos_total_size = 0;
 
             for (File fileInDirectory : videoFiles) {
-                // Skip starred recordings, we don't want to rotate those
-                Recording recording = new Recording(fileInDirectory.getAbsolutePath());
+                com.opendashcam.models.Recording recording =
+                        new com.opendashcam.models.Recording(fileInDirectory.getAbsolutePath());
                 if (recording.isStarred()) {
                     starred_videos_total_size += fileInDirectory.length() / (1024 * 1024);
                     continue;
                 }
-
-                // Track the oldest non-starred clip
-                if (oldestFile == null
-                        || oldestFile.lastModified() > fileInDirectory.lastModified()) {
+                if (oldestFile == null || oldestFile.lastModified() > fileInDirectory.lastModified()) {
                     oldestFile = fileInDirectory;
                 }
             }
 
             if ((quota - starred_videos_total_size) < Util.getQuotaWarningThreshold()) {
-                Util.showToastLong(
-                        context.getApplicationContext(),
-                        "WARNING: Low on space quota.\n" +
-                                "Un-star videos to free up space.");
+                Util.showToastLong(context.getApplicationContext(),
+                        "WARNING: Low on space quota.\nUn-star videos to free up space.");
             }
 
-            if (oldestFile == null) {
-                break;
-            }
+            if (oldestFile == null) break;
 
-            //delete recording from storage and sqlite
-            Util.deleteSingleRecording(
-                    new Recording(oldestFile.getAbsolutePath())
-            );
+            Util.deleteSingleRecording(new com.opendashcam.models.Recording(oldestFile.getAbsolutePath()));
         }
 
-        // Remove any now-empty dated/hourly folders
         pruneEmptyDirectories(mRecordingsDirectory);
 
         long elapsedTime = System.currentTimeMillis() - startTime;
-        Log.d("DEBUG", "rotateRecordings Time: " + (TimeUnit.MILLISECONDS.convert(elapsedTime, TimeUnit.MILLISECONDS)) + " milliseconds");
+        Log.d("DEBUG", "rotateRecordings Time: "
+                + TimeUnit.MILLISECONDS.convert(elapsedTime, TimeUnit.MILLISECONDS) + " milliseconds");
     }
 
-    /**
-     * Moves completed clips out of the "live" root folder into a dated/hourly structure
-     * (yyyy-MM-dd/HH) once their hour has ended. Clips from the current hour are left in the
-     * root so the in-progress recording is never touched. This is low-priority housekeeping
-     * that runs on the recorder's background thread each time a new clip starts.
-     */
     private void organizeRecordings() {
         File root = mRecordingsDirectory;
         if (root == null) return;
@@ -413,10 +469,8 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
         boolean movedAny = false;
 
         for (File f : files) {
-            // Only loose clips directly in the root are candidates; organized clips are in subfolders
             if (f.isDirectory()) continue;
             if (!f.getName().endsWith(".mp4")) continue;
-            // Never move the clip currently being written
             if (f.getAbsolutePath().equals(currentVideoFile)) continue;
 
             Calendar c = Calendar.getInstance();
@@ -425,7 +479,7 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
             boolean sameHour = c.get(Calendar.YEAR) == now.get(Calendar.YEAR)
                     && c.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
                     && c.get(Calendar.HOUR_OF_DAY) == now.get(Calendar.HOUR_OF_DAY);
-            if (sameHour) continue; // current hour still in progress; keep clip in the live area
+            if (sameHour) continue;
 
             File targetDir = new File(new File(root, dateFmt.format(c.getTime())), hourFmt.format(c.getTime()));
             if (!targetDir.exists()) targetDir.mkdirs();
@@ -442,9 +496,6 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
         }
     }
 
-    /**
-     * Recursively collects all .mp4 clips under the given directory.
-     */
     private void collectVideoFiles(File dir, List<File> out) {
         if (dir == null) return;
         File[] files = dir.listFiles();
@@ -458,10 +509,6 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
         }
     }
 
-    /**
-     * Removes empty directories (e.g. dated/hourly folders left behind after rotation), but
-     * never removes the root recordings directory itself.
-     */
     private void pruneEmptyDirectories(File root) {
         if (root == null) return;
         File[] children = root.listFiles();
@@ -477,59 +524,25 @@ public class BackgroundVideoRecorder extends Service implements SurfaceHolder.Ca
         }
     }
 
-    /**
-     * Disable system sounds if set in preferences
-     *
-     * NOTE: From N onward, volume adjustments that would toggle Do Not Disturb are not allowed unless
-     *              the app has been granted Do Not Disturb Access.
-     *
-     * @param editor Editor for current recordings preference
-     */
+    // --- System sound muting (unchanged behavior) ---
+
     private void disableSound(SharedPreferences.Editor editor) {
-//        long startTime = System.currentTimeMillis();
         if (settings.getBoolean("disable_sound", true)) {
-            // Record system volume before app was started
-            AudioManager audio = (AudioManager) this.getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+            AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
             int volume = audio.getStreamVolume(AudioManager.STREAM_SYSTEM);
-            editor.putInt(
-                    getString(R.string.pre_start_volume),
-                    volume);
+            editor.putInt(getString(R.string.pre_start_volume), volume);
             editor.apply();
-            // Only make change if not in silent
             if (volume > 0) {
-                // Set to silent & vibrate
                 audio.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
             }
         }
-//        long elapsedTime = System.currentTimeMillis() - startTime;
-//        Log.i("DEBUG", "disableSound Time: " + (TimeUnit.MILLISECONDS.convert(elapsedTime, TimeUnit.MILLISECONDS)) + " milliseconds");
     }
 
     private void reEnableSound() {
-//        long startTime = System.currentTimeMillis();
-        // Record system volume before app was started
-        AudioManager audio = (AudioManager) this.getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-        int volume = sharedPref.getInt(this.getString(R.string.pre_start_volume), 0);
-        // Only make change if not in silent
+        AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+        int volume = sharedPref.getInt(getString(R.string.pre_start_volume), 0);
         if (volume > 0) {
-            // Set to silent & vibrate
             audio.setStreamVolume(AudioManager.STREAM_SYSTEM, volume, AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE);
         }
-//        long elapsedTime = System.currentTimeMillis() - startTime;
-//        Log.i("DEBUG", "reEnableSound Time: " + (TimeUnit.MILLISECONDS.convert(elapsedTime, TimeUnit.MILLISECONDS)) + " milliseconds");
-    }
-
-
-    @Override
-    public void surfaceChanged(SurfaceHolder surfaceHolder, int format, int width, int height) {
-    }
-
-    @Override
-    public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
     }
 }
