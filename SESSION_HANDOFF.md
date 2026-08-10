@@ -3,9 +3,17 @@
 This document captures everything done in the modernization/feature session so a new agent
 session (on a different machine) can pick up with full context.
 
-> Repo: `maxneaga/open_dash_cam_android` (this is a worktree/branch:
-> `open_dash_cam_android.worktrees/dashcam-app-usage-guide-android13`)
-> All changes below are **uncommitted** in the working tree unless you decide to commit.
+> Repo: `maxneaga/open_dash_cam_android`. Work was done in a worktree/branch
+> `open_dash_cam_android.worktrees/dashcam-app-usage-guide-android13`.
+>
+> **Git state:** committed and pushed to a fork you own:
+> - Remote `fork` = `https://github.com/punch-github/open_dash_cam_android.git`
+> - Branch: `feature/dashcam-android13-modernization`
+> - Commits (authored as `punch-github <14547377+punch-github@users.noreply.github.com>`):
+>   `c14137b` (modernization+features), `fba6807` (home screen+shortcut+delete fix),
+>   `8be7e42` (dark mode, charge automation, location safety+metadata).
+> - The CLI account (`punch-github`) has **no write access to `maxneaga/...`**, so pushes go to the fork.
+> - `*.apk` is git-ignored; `local.properties` is git-ignored.
 
 ---
 
@@ -51,19 +59,25 @@ adb install "mobile\build\outputs\apk\debug\mobile-debug.apk"
 
 ## 3. Architecture (quick map)
 
-- `MainActivity` — launcher; requests permissions, then starts services and finishes (no real UI).
+- `MainActivity` — **home screen** (launcher). Shows a big REC button, storage bar, and
+  Recordings/Settings cards. Does **NOT** auto-start recording; the user starts it from the REC
+  button or a pinned "Start Recording" home-screen shortcut. Handles permission gating.
 - `WidgetService` — foreground service; draws the overlay REC widget; holds a wake lock; also
   hosts the **battery/thermal monitor** (overheat alert + low-battery safe shutdown).
 - `BackgroundVideoRecorder` — foreground service; legacy `android.hardware.Camera` + `MediaRecorder`
   recording into ~app-private external `Movies` dir; loop rotation; folder organization; wake lock;
-  exposes `isRecording` / `recordingStartedAt`.
+  embeds GPS metadata; exposes `isRecording` / `recordingStartedAt`.
+- `PowerConnectionReceiver` — manifest receiver for `ACTION_POWER_CONNECTED/DISCONNECTED`;
+  auto-starts/auto-stops recording per the Automation settings.
 - `models/Widget` — the floating overlay button + menu (View recordings, Save, **Live view**,
   Settings, Stop). Supports **long-press drag** to move vertically.
 - `SettingsActivity` — custom **card-based** settings with a **custom segmented control**.
 - `ViewRecordingsActivity` + `ViewRecordingsRecyclerViewAdapter` — folder browser with tabs
   (All/Starred), count + total size header, delete-all, and **multi-select delete**.
 - `LiveViewActivity` — **telemetry HUD** (no camera image; see decision below).
-- `Util` — prefs-backed getters, storage math, event log, notifications, delete helpers.
+- `Util` — prefs-backed getters, storage math, event log, notifications, delete helpers,
+  `startRecordingServices`/`stopRecordingServices`/`isRecording`/`hasRecordingPermissions`.
+- `OpenDashApp` — sets `AppCompatDelegate` night mode to follow the system.
 
 Recordings are stored under the app-private external `Movies` folder and organized into
 `yyyy-MM-dd/HH/clip.mp4` once each hour ends.
@@ -112,6 +126,25 @@ Recordings are stored under the app-private external `Movies` folder and organiz
   Files: `SettingsActivity.java`, `activity_settings.xml`, drawables `seg_selected.xml`/
   `seg_unselected.xml`, color `colorSegmentSelected`.
 
+### Round 4 — home screen + shortcut + delete-button fix
+- **App launch now opens a home screen** ([activity_main.xml]) instead of auto-starting recording:
+  big REC button ("Mount securely. Tap to start."), storage bar (used/limit + %), and
+  Recordings/Settings cards + settings icon.
+- **Start Recording**: the REC button starts (and can stop) the overlay-widget recording via the
+  shared `Util.startRecordingServices()`. A **pinned home-screen shortcut** ("Start Recording",
+  via `ShortcutManager`) launches `MainActivity` with `EXTRA_START_RECORDING` to start directly.
+  `MainActivity` is `singleTop` + handles `onNewIntent`.
+- **Delete-all button** restyled from the odd-looking Material button to a clean red-outlined
+  control (`bg_delete_button`) + confirmation dialog.
+
+### Round 5 — dark mode + charge automation + location
+- **Dark mode**: Material **DayNight** theme + `values-night/colors.xml`; semantic colors
+  (`colorWindowBg/colorCard/colorCardAlt/colorDivider/segUnsel*`); follows system via `OpenDashApp`.
+- **Auto-start on charge / auto-stop on unplug**: Settings "Automation" toggles
+  (`auto_start_on_charge`, `auto_stop_on_discharge`) + `PowerConnectionReceiver`.
+- **Location-off safety**: all location access guarded so disabled/denied location never crashes.
+- **Location/time metadata**: `MediaRecorder.setLocation()` embeds GPS into each clip when available.
+
 ---
 
 ## 5. Key decisions / caveats
@@ -123,25 +156,35 @@ Recordings are stored under the app-private external `Movies` folder and organiz
   or migrating to Camera2/CameraX) and on-device iteration.
 - App still uses the **deprecated legacy Camera API** (works on Android 13, but a Camera2/CameraX
   migration is the eventual right move, especially for reliable screen-off + live preview).
-- App theme is `Theme.MaterialComponents.Light.DarkActionBar.Bridge` (needed for Material Slider/
-  Switch/Button).
+- App theme is `Theme.MaterialComponents.DayNight.DarkActionBar.Bridge` (Material Slider/Switch/Button
+  support + light/dark). Night overrides live in `values-night/colors.xml`.
 - **All testing so far was compile/build only** — there was **no physical device** on the devbox.
   Everything below needs on-device verification.
+- **Charge automation** (auto start/stop) depends on OEM background-start behavior; auto-start relies
+  on the overlay-permission exemption for background foreground-service starts. Verify per device.
 
 ---
 
 ## 6. Verification checklist (do on a real Android 13 phone)
 
-- [ ] App launches; grant camera, mic, notifications, "display over other apps", (location for HUD).
-- [ ] REC widget appears; **long-press + drag** moves it; tap opens the menu.
+- [ ] Launch shows the **home screen** (no auto-record). Grant camera, mic, notifications,
+      "display over other apps", (location for HUD/metadata).
+- [ ] Home **REC button** starts recording (widget appears); tapping again / Stop ends it.
+- [ ] **"Add Start Recording to home screen"** creates a launcher shortcut that starts recording.
+- [ ] REC widget: **long-press + drag** moves it; tap opens the menu.
 - [ ] New clips are **silent** (no per-clip beep).
 - [ ] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
-      is tappable and **persists** after reopening; storage slider + switches work; 1080p records at 1080p.
+      is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
+- [ ] **Delete all recordings** button looks right and shows a confirmation dialog.
 - [ ] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
 - [ ] Recordings screen: count, total size, All/Starred tabs, delete-all, multi-select delete, empty state.
 - [ ] **Live view** (eye icon) updates every second; GPS/speed populate after granting location;
       temperature label changes; event log lists clip starts, foldering, warnings.
 - [ ] Overheat alert fires above threshold; low-battery auto-shutdown works when enabled + unplugged.
+- [ ] **Dark mode**: toggle system dark theme → all screens adapt.
+- [ ] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
+- [ ] Turn **location off** → recording and Recordings/HUD do not crash.
+- [ ] Play a clip → its GPS **metadata** is present (in a player/details view).
 
 ---
 
@@ -155,24 +198,12 @@ Recordings are stored under the app-private external `Movies` folder and organiz
 - "Exported" tab / share/export flow.
 - Consider migrating capture to Camera2/CameraX (reliable screen-off + live preview + burn-in).
 
-## 8. Round 5 additions (this session)
+## 8. Prompt to bootstrap the new session
 
-- **Dark mode**: Material **DayNight** theme + `values-night/colors.xml`; semantic colors
-  (`colorWindowBg/colorCard/colorCardAlt/colorDivider/segUnsel*`); `AppCompatDelegate` follows system.
-- **Auto-start on charge** and **auto-stop on unplug**: Settings "Automation" toggles
-  (`auto_start_on_charge`, `auto_stop_on_discharge`) + `PowerConnectionReceiver` (manifest) reacting to
-  `ACTION_POWER_CONNECTED/DISCONNECTED`. Auto-start relies on the overlay-permission exemption for
-  background FGS starts; wrapped in try/catch + logged. **Needs on-device verification per OEM.**
-- **Location-off safety**: all location access guarded (`BackgroundVideoRecorder.getLastKnownLocationSafe`,
-  LiveView try/catch) so disabled/denied location never crashes recording or the HUD.
-- **Location/time metadata**: `MediaRecorder.setLocation()` embeds GPS into each clip when available.
-
----
-
-## 9. Prompt to bootstrap the new session
-
-> "Continue work on the Open Dash Cam Android app (branch
-> dashcam-app-usage-guide-android13). Read SESSION_HANDOFF.md in the repo root for full context.
-> Toolchain: JDK 17 + Gradle 8.2 + AGP 8.1.4, compileSdk 34 / targetSdk 33. Build with
-> `.\gradlew.bat :mobile:assembleDebug`. A phone is now connected via adb, so please install and
-> help me test the verification checklist and fix anything that misbehaves."
+> "Continue work on the Open Dash Cam Android app. The code is on my fork
+> `punch-github/open_dash_cam_android`, branch `feature/dashcam-android13-modernization`.
+> Read SESSION_HANDOFF.md in the repo root for full context. Toolchain: JDK 17 + Gradle 8.2 +
+> AGP 8.1.4, compileSdk 34 / targetSdk 33. Build with `.\gradlew.bat :mobile:assembleDebug`.
+> A phone is now connected via adb, so please install and help me test the section-6 verification
+> checklist and fix anything that misbehaves. Priorities: verify charge-based auto start/stop per my
+> device, and (optionally) start the Camera2/CameraX migration to burn timestamp/GPS into the video."
