@@ -7,8 +7,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.RectF;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -22,7 +24,6 @@ import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.text.format.DateFormat;
 import android.util.Log;
-import android.util.Size;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -280,53 +281,60 @@ public class BackgroundVideoRecorder extends LifecycleService {
     }
 
     /**
-     * Draws the timestamp and GPS location onto the frame. Rotating the canvas about the frame
-     * center maps the "upright" logical rect onto the buffer regardless of the frame rotation,
-     * so the text stays readable in the recorded video.
+     * Draws the timestamp and GPS location onto the frame.
+     *
+     * The overlay must be drawn in the camera **sensor coordinate system** and mapped to the
+     * output buffer with {@link Frame#getSensorToBufferTransform()}. That transform (plus the
+     * video's rotation metadata) is what keeps both the scene and the overlay upright in the final
+     * video, regardless of device/mount orientation. (Manually rotating the canvas double-applies
+     * the rotation and makes the text upside-down.)
      */
     private void drawOverlay(Frame frame) {
         Canvas canvas = frame.getOverlayCanvas();
+        // Clear the whole canvas first (CLEAR ignores the current matrix)
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
 
-        Size size = frame.getSize();
-        int w = size.getWidth();
-        int h = size.getHeight();
-        int rot = frame.getRotationDegrees();
+        Matrix sensorToBuffer = frame.getSensorToBufferTransform();
 
-        float lw = (rot == 90 || rot == 270) ? h : w;
-        float lh = (rot == 90 || rot == 270) ? w : h;
-        float left = w / 2f - lw / 2f;
-        float right = w / 2f + lw / 2f;
-        float bottom = h / 2f + lh / 2f;
+        // Recover the sensor-space bounds by inverse-mapping the buffer rectangle, so we can
+        // position the text along the bottom edge of the (upright) sensor image.
+        RectF sensorRect = new RectF(0, 0, frame.getSize().getWidth(), frame.getSize().getHeight());
+        Matrix bufferToSensor = new Matrix();
+        if (sensorToBuffer.invert(bufferToSensor)) {
+            bufferToSensor.mapRect(sensorRect);
+        }
+
+        // Draw in sensor coordinates
+        canvas.setMatrix(sensorToBuffer);
 
         String line1 = DateFormat.format("yyyy-MM-dd  HH:mm:ss", new Date()).toString();
         String line2 = mHasLocation
                 ? String.format(Locale.US, "%.5f, %.5f   %.0f km/h", mLat, mLng, mSpeedKmh)
                 : "GPS: acquiring\u2026";
 
-        float textSize = Math.max(24f, lh * 0.03f);
+        float textSize = Math.max(24f, sensorRect.height() * 0.03f);
         mTextPaint.setTextSize(textSize);
 
         float pad = textSize * 0.5f;
         float lineGap = textSize * 0.35f;
         float stripHeight = textSize * 2 + lineGap + pad * 2;
 
-        canvas.save();
-        canvas.rotate(rot, w / 2f, h / 2f);
+        // Background strip along the bottom of the upright sensor image
+        canvas.drawRect(sensorRect.left, sensorRect.bottom - stripHeight,
+                sensorRect.right, sensorRect.bottom, mBgPaint);
 
-        // Background strip along the bottom of the upright frame
-        canvas.drawRect(left, bottom - stripHeight, right, bottom, mBgPaint);
-
-        float x = left + pad;
-        float baseline2 = bottom - pad;
+        float x = sensorRect.left + pad;
+        float baseline2 = sensorRect.bottom - pad;
         float baseline1 = baseline2 - textSize - lineGap;
         canvas.drawText(line1, x, baseline1, mTextPaint);
         canvas.drawText(line2, x, baseline2, mTextPaint);
-
-        canvas.restore();
     }
 
     // --- Location for the overlay ---
+
+    // Poll location roughly once a minute (GPS primary; NETWORK as a fallback which uses
+    // wifi/mobile data transparently via the OS).
+    private static final long LOCATION_POLL_MS = 60_000L;
 
     private void startLocationUpdates() {
         try {
@@ -347,10 +355,12 @@ public class BackgroundVideoRecorder extends LifecycleService {
                 }
             }
 
+            // GPS is the primary source; NETWORK (wifi/mobile) is a fallback for when GPS has no fix.
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
                 try {
                     if (mLocationManager.isProviderEnabled(provider)) {
-                        mLocationManager.requestLocationUpdates(provider, 1000, 0, mLocationListener, Looper.getMainLooper());
+                        mLocationManager.requestLocationUpdates(
+                                provider, LOCATION_POLL_MS, 0, mLocationListener, Looper.getMainLooper());
                     }
                 } catch (Exception ignored) {
                     // Provider may be unavailable; ignore
