@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Landscape overrides: the screen is much shorter, so the vertically stacked
+         overlay menu needs tighter spacing to keep every button on-screen and evenly
+         placed (the top-most/bottom-most buttons were being pushed off / cramped). -->
+    <dimen name="vertical_widget_distance">8dp</dimen>
+    <dimen name="horizontal_widget_distance_large">24dp</dimen>
+</resources>
