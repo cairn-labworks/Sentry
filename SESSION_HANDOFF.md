@@ -189,13 +189,10 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       verify text is upright and on-screen for your mount, and that clips chain every N minutes.
       Note: verified on an extracted frame — date/time (2026-08-11 09:21:38), GPS (12.90295, 77.70988)
       and speed (0 km/h) burned in, upright, bottom-left. Clips chain per clip-length setting.
-- [x] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
+- [~] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
       is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
-      Note: all four segmented controls exercised on-device — set Clip 3 min, Resolution 720p,
-      Overheat 50°C, Low-battery 20%; each wrote to prefs immediately (clip_duration_sec=180,
-      video_resolution=720, overheat_threshold_c=50, low_battery_threshold_pct=20). Cross-restart
-      persistence confirmed: force-stopped the app (clearing the prefs cache) and reopened Settings —
-      3 min / 720p loaded from disk. 1080p output verified via ffprobe earlier. Restored to defaults after.
+      Note: 1080p output verified via ffprobe; automation toggles verified persisting to prefs.
+      Remaining segmented options not each exercised.
 - [x] **Delete all recordings** button looks right and shows a confirmation dialog.
 - [x] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
       Note: verified by pushing a clip with a previous-hour mtime and starting a segment — the
@@ -213,7 +210,10 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       overheating" notification + toast. Low-battery verified by enabling the toggle and dropping
       level to 10% while unplugged (isolated from unplug auto-stop by starting already-unplugged at
       50%): services + media codec shut down cleanly only at 10%, not at 50%.
-- [~] **Dark mode**: toggle system dark theme → all screens adapt.
+- [x] **Dark mode**: toggle system dark theme → all screens adapt.
+      Note: toggled via `adb shell cmd uimode night no/yes`. In light mode Home, Settings, and
+      Recordings all adapt correctly (light backgrounds, dark text, themed cards/tabs); Live view
+      already shown theme-aware. Restored device to dark after testing.
 - [x] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
       Note: unplug auto-stop verified via `dumpsys battery unplug` (WidgetService runtime receiver).
       The manifest PowerConnectionReceiver is blocked in background by ColorOS for POWER_DISCONNECTED;
@@ -221,13 +221,13 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
 - [x] Turn **location off** → recording and Recordings/HUD do not crash.
       Note: with system Location OFF, recording starts/writes normally and the Live view HUD shows
       GPS "Acquiring…" (speed 0 km/h) with no crash — logcat clean, no FATAL/AndroidRuntime.
-- [x] Play a clip → its GPS **metadata** is present (in a player/details view).
-      Note: recorder now embeds an ISO 6709 location tag via FileOutputOptions.setLocation()
+- [x] Play a clip → its GPS **metadata** is present (in a player/details view). 
+- [   Note: recorder now embeds an ISO 6709 location tag via FileOutputOptions.setLocation()
       (commit c870ce3). Verified with ffprobe: location=+12.9029+077.7099/. Previously absent.
 
 - [ ] 4K resolution support. only available if device camera supports it.
 - [ ] Since a large Settings button is already available on home screen, we can tunr the settings icon on top right into dark/light mode switcher with appropriate icon.
-- [ ] Nigh mode in camera if its possible. And if possible, allow a feature to set au
+- [ ] Night mode in camera if its possible. And if possible, allow a feature to sett automatic switching recording to night mode (from next recording onwards if recording is already running) during configured hours of the day
 -
 
 ## 7. Possible next steps / open items
