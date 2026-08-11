@@ -14,3 +14,5 @@
 
 # Build artifacts
 *.apk
+# Local session notes (not for the repo)
+SESSION_HANDOFF.md
