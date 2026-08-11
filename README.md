@@ -10,6 +10,12 @@ Sentry is a modernized rebuild of the original Open Dash Cam project, updated fo
 rewritten on top of CameraX, and extended with loop recording, an on-video overlay, a
 recordings browser, safety automation, and more.
 
+## Screenshots
+
+| Home | Settings |
+| :--: | :------: |
+| <img src="assets/screenshots/home.png" width="260" alt="Sentry home screen" /> | <img src="assets/screenshots/settings.png" width="260" alt="Sentry settings screen" /> |
+
 ## Features
 
 - **Background loop recording** — records in fixed-length clips using the rear camera via a
