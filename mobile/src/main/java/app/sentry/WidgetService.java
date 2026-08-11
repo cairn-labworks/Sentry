@@ -171,11 +171,9 @@ public class WidgetService extends Service {
         DBHelper dbHelper = DBHelper.getInstance(this);
         dbHelper.close();
 
-        // Return to home screen
-        Intent startMain = new Intent(Intent.ACTION_MAIN);
-        startMain.addCategory(Intent.CATEGORY_HOME);
-        startMain.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(startMain);
+        // Note: we intentionally do NOT launch the launcher home screen here.
+        // Stopping the recording should simply remove the overlay widget and leave
+        // whatever the user was on (e.g. the app's home screen) visible.
 
         //remove wakelock
         if (mWakeLock != null) {

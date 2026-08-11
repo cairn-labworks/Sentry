@@ -65,7 +65,8 @@ public class Widget {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.TRANSLUCENT);
 
 //        rootView.setImageResource(widgetDrawableResource);
@@ -144,6 +145,20 @@ public class Widget {
 
             // The REC button supports both tap (toggle menu) and long-press-drag (reposition)
             setupDragOnRecButton(context);
+
+            // Collapse the expanded menu when the user touches anywhere outside the
+            // overlay windows (the expanded option buttons live inside rootViewMenu, so
+            // touching them does not count as an outside touch).
+            rootViewMenu.setOnTouchListener(new View.OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    if (event.getActionMasked() == MotionEvent.ACTION_OUTSIDE
+                            && areSecondaryWidgetsShown) {
+                        hideSecondaryWidgets();
+                    }
+                    return false;
+                }
+            });
 
             hideSecondaryWidgets();
         }

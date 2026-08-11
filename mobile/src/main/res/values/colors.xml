@@ -16,4 +16,8 @@
     <color name="segUnselBg">#FFEDEFF3</color>
     <color name="segUnselStroke">#FFCFD8DC</color>
     <color name="segUnselText">#FF37474F</color>
+
+    <!-- Theme-aware icon tint and action/link text (overridden in values-night) -->
+    <color name="colorIcon">#FF37474F</color>
+    <color name="colorAction">#3F51B5</color>
 </resources>

@@ -51,6 +51,12 @@ public class MainActivity extends AppCompatActivity {
     private final Runnable mTimerTick = new Runnable() {
         @Override
         public void run() {
+            if (!Util.isRecording()) {
+                // Recording was stopped elsewhere (e.g. the overlay widget's "Stop"
+                // button). Revert the whole home screen to its idle state and stop ticking.
+                updateUi();
+                return;
+            }
             updateRecTimer();
             mTimerHandler.postDelayed(this, 1000L);
         }
@@ -229,7 +235,6 @@ public class MainActivity extends AppCompatActivity {
     /** Updates the elapsed-time label from the recorder's start timestamp. */
     private void updateRecTimer() {
         if (!Util.isRecording()) {
-            stopRecTimer();
             return;
         }
         long startedAt = BackgroundVideoRecorder.recordingStartedAt;

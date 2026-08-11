@@ -469,7 +469,7 @@
                     android:focusable="true"
                     android:gravity="center"
                     android:text="Add to home screen"
-                    android:textColor="@color/colorPrimary"
+                    android:textColor="@color/colorAction"
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
