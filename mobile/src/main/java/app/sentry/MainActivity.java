@@ -9,6 +9,8 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -42,7 +44,17 @@ public class MainActivity extends AppCompatActivity {
     /** True while a start-recording flow is waiting on a permission result. */
     private boolean mPendingStart = false;
 
-    private TextView mStorageText, mStoragePercent, mRecSubtitle;
+    private TextView mStorageText, mStoragePercent, mRecSubtitle, mRecTimer;
+    private ImageView mRecIcon;
+
+    private final Handler mTimerHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mTimerTick = new Runnable() {
+        @Override
+        public void run() {
+            updateRecTimer();
+            mTimerHandler.postDelayed(this, 1000L);
+        }
+    };
 
     private String[] getRequiredPermissions() {
         List<String> perms = new ArrayList<>();
@@ -96,10 +108,18 @@ public class MainActivity extends AppCompatActivity {
         updateUi();
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopRecTimer();
+    }
+
     private void bindViews() {
         mStorageText = findViewById(R.id.storage_text);
         mStoragePercent = findViewById(R.id.storage_percent);
         mRecSubtitle = findViewById(R.id.rec_subtitle);
+        mRecTimer = findViewById(R.id.rec_timer);
+        mRecIcon = findViewById(R.id.rec_icon);
 
         findViewById(R.id.btn_rec).setOnClickListener(v -> onRecClicked());
         ImageView themeBtn = findViewById(R.id.btn_settings);
@@ -177,9 +197,48 @@ public class MainActivity extends AppCompatActivity {
         mStoragePercent.setText(pct + "%");
 
         // REC state
-        mRecSubtitle.setText(Util.isRecording()
+        boolean recording = Util.isRecording();
+        mRecSubtitle.setText(recording
                 ? "Recording in progress. Tap to stop."
                 : "Mount securely. Tap to start.");
+        mRecIcon.setImageResource(recording
+                ? R.drawable.ic_rec_active
+                : R.drawable.ic_rec_camera);
+        mRecIcon.setContentDescription(recording ? "Stop recording" : "Start recording");
+
+        if (recording) {
+            mRecTimer.setVisibility(View.VISIBLE);
+            startRecTimer();
+        } else {
+            stopRecTimer();
+            mRecTimer.setVisibility(View.GONE);
+        }
+    }
+
+    /** Formats the elapsed recording time and starts the once-a-second ticker. */
+    private void startRecTimer() {
+        updateRecTimer();
+        mTimerHandler.removeCallbacks(mTimerTick);
+        mTimerHandler.postDelayed(mTimerTick, 1000L);
+    }
+
+    private void stopRecTimer() {
+        mTimerHandler.removeCallbacks(mTimerTick);
+    }
+
+    /** Updates the elapsed-time label from the recorder's start timestamp. */
+    private void updateRecTimer() {
+        if (!Util.isRecording()) {
+            stopRecTimer();
+            return;
+        }
+        long startedAt = BackgroundVideoRecorder.recordingStartedAt;
+        long elapsedMs = startedAt > 0 ? Math.max(0, System.currentTimeMillis() - startedAt) : 0;
+        long totalSec = elapsedMs / 1000L;
+        long h = totalSec / 3600L;
+        long m = (totalSec % 3600L) / 60L;
+        long s = totalSec % 60L;
+        mRecTimer.setText(String.format(Locale.US, "%02d:%02d:%02d", h, m, s));
     }
 
     // --- Start-recording flow (with permission gating) ---
@@ -210,8 +269,9 @@ public class MainActivity extends AppCompatActivity {
 
         Util.startRecordingServices(this);
         Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show();
-        // Give the overlay the foreground; leave home in the background
-        moveTaskToBack(true);
+        // Keep the home screen open and reflect the recording state (icon + timer). The overlay
+        // widget still launches on top; the user can return to this screen anytime.
+        mRecSubtitle.postDelayed(this::updateUi, 300);
     }
 
     // --- Permission helpers ---

@@ -49,6 +49,19 @@
             android:text="Mount securely. Tap to start."
             android:textColor="@color/colorTextSecondary"
             android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/rec_timer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:text="00:00:00"
+            android:textColor="@color/colorTextPrimary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Right pane: header, storage, cards and shortcut. Scrollable so nothing is cut off. -->
