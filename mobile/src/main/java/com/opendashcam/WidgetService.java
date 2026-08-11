@@ -23,6 +23,14 @@ public class WidgetService extends Service {
     private long mLastOverheatWarnMs = 0;
     private boolean mIsShuttingDown = false;
 
+    // Tracks charger-plugged state across battery broadcasts so we can detect the
+    // plugged -> unplugged transition and auto-stop recording. We rely on the
+    // reliably-delivered ACTION_BATTERY_CHANGED broadcast (registered while this
+    // foreground service runs) rather than the manifest PowerConnectionReceiver,
+    // which aggressive OEM battery managers (e.g. ColorOS) block in the background.
+    private boolean mPluggedStateKnown = false;
+    private boolean mWasPluggedIn = false;
+
     /**
      * Monitors battery temperature and level to protect battery health:
      * warns on overheating and can safely shut the app down on low battery.
@@ -39,6 +47,28 @@ public class WidgetService extends Service {
 
             boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
                     || status == BatteryManager.BATTERY_STATUS_FULL;
+
+            // Auto-stop on unplug. EXTRA_PLUGGED is 0 only when the cable is truly
+            // disconnected (unlike "charging", which is false when the battery is FULL
+            // but still plugged in). Detect the plugged -> unplugged transition here so
+            // auto-stop works even when the manifest PowerConnectionReceiver is blocked.
+            int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+            if (plugged != -1) {
+                boolean pluggedIn = plugged != 0;
+                if (!mPluggedStateKnown) {
+                    mPluggedStateKnown = true;
+                    mWasPluggedIn = pluggedIn;
+                } else if (mWasPluggedIn && !pluggedIn) {
+                    mWasPluggedIn = false;
+                    if (Util.isAutoStopOnDischargeEnabled()) {
+                        Util.logEvent("Auto-stop: charger disconnected");
+                        safeShutdown(getString(R.string.auto_stop_discharge_message));
+                        return;
+                    }
+                } else {
+                    mWasPluggedIn = pluggedIn;
+                }
+            }
 
             // Overheating alert (battery temperature is reported in tenths of a degree Celsius)
             if (tempTenths != Integer.MIN_VALUE && Util.isOverheatAlertEnabled()) {

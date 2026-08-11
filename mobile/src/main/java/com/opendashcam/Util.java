@@ -115,6 +115,13 @@ public final class Util {
     }
 
     /**
+     * Whether the app should stop recording when the charger is disconnected.
+     */
+    public static boolean isAutoStopOnDischargeEnabled() {
+        return getPrefs().getBoolean("auto_stop_on_discharge", false);
+    }
+
+    /**
      * Battery level (percent) at or below which the app shuts down (when not charging).
      */
     public static int getLowBatteryThreshold() {

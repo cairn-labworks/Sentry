@@ -89,6 +89,8 @@ Starred recordings will not be deleted.</string>
         phone or stopping recording to protect battery health.</string>
     <string name="low_battery_shutdown_message">Battery low (%1$d%%) and not charging. Saving the
         current clip and shutting down Open Dash Cam.</string>
+    <string name="auto_stop_discharge_message">Charger disconnected. Saving the current clip and
+        stopping Open Dash Cam.</string>
     <string name="title_activity_welcome">WelcomeActivity</string>
 
     <string name="recordings_list_empty_message_title">No recordings yet</string>
