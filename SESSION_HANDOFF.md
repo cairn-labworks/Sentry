@@ -173,24 +173,35 @@ Recordings are stored under the app-private external `Movies` folder and organiz
 
 ## 6. Verification checklist (do on a real Android 13 phone)
 
-- [ ] Launch shows the **home screen** (no auto-record). Grant camera, mic, notifications,
+Status legend: [x] verified on device · [~] partially verified (see note) · [ ] not yet verified.
+Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
+
+- [x] Launch shows the **home screen** (no auto-record). Grant camera, mic, notifications,
       "display over other apps", (location for HUD/metadata).
-- [ ] Home **REC button** starts recording (widget appears); tapping again / Stop ends it.
+      Note: ColorOS blocks adb `pm grant`/`appops`; permissions were granted manually via App Info.
+- [x] Home **REC button** starts recording (widget appears); tapping again / Stop ends it.
 - [ ] **"Add Start Recording to home screen"** creates a launcher shortcut that starts recording.
 - [ ] REC widget: **long-press + drag** moves it; tap opens the menu.
 - [ ] New clips are **silent** (no per-clip beep).
-- [ ] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
+- [~] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
       verify text is upright and on-screen for your mount, and that clips chain every N minutes.
-- [ ] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
+      Note: date/time verified burned-in, upright, advancing per frame. GPS showed "acquiring…"
+      indoors (no fix) — needs an outdoor re-test.
+- [~] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
       is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
+      Note: 1080p output verified via ffprobe; automation toggles verified persisting to prefs.
+      Remaining segmented options not each exercised.
 - [ ] **Delete all recordings** button looks right and shows a confirmation dialog.
 - [ ] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
 - [ ] Recordings screen: count, total size, All/Starred tabs, delete-all, multi-select delete, empty state.
 - [ ] **Live view** (eye icon) updates every second; GPS/speed populate after granting location;
       temperature label changes; event log lists clip starts, foldering, warnings.
 - [ ] Overheat alert fires above threshold; low-battery auto-shutdown works when enabled + unplugged.
-- [ ] **Dark mode**: toggle system dark theme → all screens adapt.
-- [ ] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
+- [~] **Dark mode**: toggle system dark theme → all screens adapt.
+- [x] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
+      Note: unplug auto-stop verified via `dumpsys battery unplug` (WidgetService runtime receiver).
+      The manifest PowerConnectionReceiver is blocked in background by ColorOS for POWER_DISCONNECTED;
+      POWER_CONNECTED still fires and auto-starts. See auto-stop fix in commit 583d58c.
 - [ ] Turn **location off** → recording and Recordings/HUD do not crash.
 - [ ] Play a clip → its GPS **metadata** is present (in a player/details view).
 
