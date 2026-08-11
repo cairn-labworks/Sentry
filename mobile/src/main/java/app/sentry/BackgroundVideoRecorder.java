@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -140,7 +140,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             mWakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK, "OpenDash:RecorderWakeLock");
+                    PowerManager.PARTIAL_WAKE_LOCK, "Sentry:RecorderWakeLock");
             mWakeLock.acquire();
         }
 
@@ -352,7 +352,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
     private void onSegmentFinalized(VideoRecordEvent.Finalize event) {
         // A duration-limit finalize still produces a valid file
-        Util.insertNewRecording(new app.opendash.models.Recording(currentVideoFile));
+        Util.insertNewRecording(new app.sentry.models.Recording(currentVideoFile));
 
         if (!mStopping) {
             startNextSegment();
@@ -526,8 +526,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
             int starred_videos_total_size = 0;
 
             for (File fileInDirectory : videoFiles) {
-                app.opendash.models.Recording recording =
-                        new app.opendash.models.Recording(fileInDirectory.getAbsolutePath());
+                app.sentry.models.Recording recording =
+                        new app.sentry.models.Recording(fileInDirectory.getAbsolutePath());
                 if (recording.isStarred()) {
                     starred_videos_total_size += fileInDirectory.length() / (1024 * 1024);
                     continue;
@@ -544,7 +544,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
             if (oldestFile == null) break;
 
-            Util.deleteSingleRecording(new app.opendash.models.Recording(oldestFile.getAbsolutePath()));
+            Util.deleteSingleRecording(new app.sentry.models.Recording(oldestFile.getAbsolutePath()));
         }
 
         pruneEmptyDirectories(mRecordingsDirectory);

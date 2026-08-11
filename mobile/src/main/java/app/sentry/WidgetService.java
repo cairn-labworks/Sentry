@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -10,7 +10,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.view.WindowManager;
 
-import app.opendash.models.Widget;
+import app.sentry.models.Widget;
 
 public class WidgetService extends Service {
 

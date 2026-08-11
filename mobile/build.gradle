@@ -1,11 +1,11 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace 'app.opendash'
+    namespace 'app.sentry'
     compileSdk 34
     buildToolsVersion '35.0.0'
     defaultConfig {
-        applicationId "app.opendash"
+        applicationId "app.sentry"
         minSdk 23
         targetSdk 33
         versionCode 6

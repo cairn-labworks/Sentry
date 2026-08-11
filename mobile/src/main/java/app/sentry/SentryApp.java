@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.app.Application;
 import android.content.Context;
@@ -7,9 +7,9 @@ import android.content.Context;
  * Created by ashish on 8/23/17.
  */
 
-public class OpenDashApp extends Application {
+public class SentryApp extends Application {
 
-    private static OpenDashApp sApp;
+    private static SentryApp sApp;
 
     @Override
     public void onCreate() {

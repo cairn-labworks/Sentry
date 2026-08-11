@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.content.Context;
 import android.view.LayoutInflater;
@@ -14,7 +14,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import app.opendash.models.Recording;
+import app.sentry.models.Recording;
 
 import java.io.File;
 import java.util.ArrayList;

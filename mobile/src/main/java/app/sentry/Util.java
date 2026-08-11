@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -25,7 +25,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
-import app.opendash.models.Recording;
+import app.sentry.models.Recording;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -56,7 +56,7 @@ public final class Util {
     private static final int DEFAULT_LOW_BATTERY_THRESHOLD_PCT = 15;
 
     private static SharedPreferences getPrefs() {
-        return PreferenceManager.getDefaultSharedPreferences(OpenDashApp.getAppContext());
+        return PreferenceManager.getDefaultSharedPreferences(SentryApp.getAppContext());
     }
 
     /**
@@ -314,11 +314,11 @@ public final class Util {
 
     public static File getVideosDirectoryPath() {
         //remove an old directory if exists
-        File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/OpenDash/");
+        File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/Sentry/");
         removeNonEmptyDirectory(oldDirectory);
 
         //New directory
-        File appVideosFolder = getAppPrivateVideosFolder(OpenDashApp.getAppContext());
+        File appVideosFolder = getAppPrivateVideosFolder(SentryApp.getAppContext());
 
         if (appVideosFolder != null) {
             //create app-private folder if not exists
@@ -378,7 +378,7 @@ public final class Util {
         try {
             context.startActivity(openFile);
         } catch (ActivityNotFoundException e) {
-            Log.i("OpenDash", "Cannot open file.");
+            Log.i("Sentry", "Cannot open file.");
         }
     }
 
@@ -451,12 +451,12 @@ public final class Util {
         new File(recording.getFilePath()).delete();
 
         //delete from db
-        DBHelper.getInstance(OpenDashApp.getAppContext()).deleteRecording(
+        DBHelper.getInstance(SentryApp.getAppContext()).deleteRecording(
                 new Recording(recording.getFilePath())
         );
 
         //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
+        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
                 new Intent(ACTION_UPDATE_RECORDINGS_LIST)
         );
     }
@@ -488,7 +488,7 @@ public final class Util {
      * Broadcasts that the set of recordings changed so any open UI refreshes.
      */
     public static void broadcastRecordingsChanged() {
-        LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
+        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
                 new Intent(ACTION_UPDATE_RECORDINGS_LIST)
         );
     }
@@ -534,7 +534,7 @@ public final class Util {
             }
             file.delete();
         } else {
-            DBHelper.getInstance(OpenDashApp.getAppContext()).deleteRecording(
+            DBHelper.getInstance(SentryApp.getAppContext()).deleteRecording(
                     new Recording(file.getAbsolutePath())
             );
             file.delete();
@@ -550,10 +550,10 @@ public final class Util {
      */
     public static void insertNewRecording(Recording recording) {
         if (recording == null) return;
-        DBHelper.getInstance(OpenDashApp.getAppContext()).insertNewRecording(recording);
+        DBHelper.getInstance(SentryApp.getAppContext()).insertNewRecording(recording);
 
         //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
+        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
                 new Intent(ACTION_UPDATE_RECORDINGS_LIST)
         );
     }
@@ -770,7 +770,7 @@ public final class Util {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            DBHelper dbHelper = DBHelper.getInstance(OpenDashApp.getAppContext());
+            DBHelper dbHelper = DBHelper.getInstance(SentryApp.getAppContext());
 
             //remove all items from the SQLite database (recordings + stars)
             dbHelper.deleteAllRecordings();
@@ -793,7 +793,7 @@ public final class Util {
 
         @Override
         protected void onPostExecute(Boolean aBoolean) {
-            Context context = OpenDashApp.getAppContext();
+            Context context = SentryApp.getAppContext();
             Resources res = context.getResources();
             Util.showToastLong(
                     context,
@@ -818,7 +818,7 @@ public final class Util {
 
         @Override
         protected Void doInBackground(Void... voids) {
-            DBHelper dbHelper = DBHelper.getInstance(OpenDashApp.getAppContext());
+            DBHelper dbHelper = DBHelper.getInstance(SentryApp.getAppContext());
             //insert or delete star
             dbHelper.updateStar(mRecording);
             return null;
@@ -827,7 +827,7 @@ public final class Util {
         @Override
         protected void onPostExecute(Void aVoid) {
             //broadcast for updating videos list in UI
-            LocalBroadcastManager.getInstance(OpenDashApp.getAppContext()).sendBroadcast(
+            LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
                     new Intent(Util.ACTION_UPDATE_RECORDINGS_LIST)
             );
         }

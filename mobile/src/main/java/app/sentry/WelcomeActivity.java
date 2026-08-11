@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.content.Context;
 import android.content.Intent;

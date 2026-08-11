@@ -1,4 +1,4 @@
-package app.opendash.models;
+package app.sentry.models;
 
 import android.app.Service;
 import android.content.Context;
@@ -18,12 +18,12 @@ import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 
-import app.opendash.BackgroundVideoRecorder;
-import app.opendash.LiveViewActivity;
-import app.opendash.R;
-import app.opendash.SettingsActivity;
-import app.opendash.Util;
-import app.opendash.ViewRecordingsActivity;
+import app.sentry.BackgroundVideoRecorder;
+import app.sentry.LiveViewActivity;
+import app.sentry.R;
+import app.sentry.SettingsActivity;
+import app.sentry.Util;
+import app.sentry.ViewRecordingsActivity;
 
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 

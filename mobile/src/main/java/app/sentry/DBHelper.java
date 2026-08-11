@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.content.Context;
 import android.database.Cursor;
@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import app.opendash.models.Recording;
+import app.sentry.models.Recording;
 
 import java.util.ArrayList;
 
@@ -17,7 +17,7 @@ import java.util.ArrayList;
 public final class DBHelper extends SQLiteOpenHelper implements IDBHelper {
     // Make it a singleton
     private static DBHelper sHelper = null;
-    private static final String DATABASE_NAME = "OpenDash.db";
+    private static final String DATABASE_NAME = "Sentry.db";
     // If you change the database schema, you must increment the database version.
     private static final int DATABASE_VERSION = 2;
 

@@ -1,4 +1,4 @@
-package app.opendash;
+package app.sentry;
 
 import android.content.ContentValues;
 import android.database.Cursor;
@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.provider.BaseColumns;
 import android.util.Log;
 
-import app.opendash.models.Recording;
+import app.sentry.models.Recording;
 
 /**
  * DB contract for recordings

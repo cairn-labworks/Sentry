@@ -1,6 +1,6 @@
-package app.opendash;
+package app.sentry;
 
-import app.opendash.models.Recording;
+import app.sentry.models.Recording;
 
 import java.util.ArrayList;
 

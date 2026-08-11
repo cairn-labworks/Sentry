@@ -1,10 +1,10 @@
-package app.opendash.models;
+package app.sentry.models;
 
 import android.text.TextUtils;
 
-import app.opendash.DBHelper;
-import app.opendash.OpenDashApp;
-import app.opendash.Util;
+import app.sentry.DBHelper;
+import app.sentry.SentryApp;
+import app.sentry.Util;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -32,7 +32,7 @@ public class Recording {
      * @param filePath String
      */
     public Recording(int id, String filePath) {
-        dbHelper = DBHelper.getInstance(OpenDashApp.getAppContext());
+        dbHelper = DBHelper.getInstance(SentryApp.getAppContext());
         this.id = id;
         this.filePath = filePath;
         this.filename = new File(filePath).getName();

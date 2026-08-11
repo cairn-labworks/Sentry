@@ -1,17 +1,17 @@
 <resources>
-    <string name="app_name">OpenDash</string>
+    <string name="app_name">Sentry</string>
 
     <!-- DB Keys -->
     <string name="db_first_launch_complete_flag">FIRST_LAUNCH_FLAG</string>
-    <string name="current_recordings_preferences_key">app.opendash.CURRENT_RECORDINGS</string>
+    <string name="current_recordings_preferences_key">app.sentry.CURRENT_RECORDINGS</string>
     <string name="previous_recording_preferences_key">PREVIOUS_RECORDING</string>
     <string name="current_recording_preferences_key">CURRENT_RECORDING</string>
     <string name="pre_start_volume">PRE_START_VOLUME</string>
 
     <!-- Welcome view -->
-    <string name="app_pitchline">OpenDash is your\n eyewitness on the road.</string>
+    <string name="app_pitchline">Sentry is your\n eyewitness on the road.</string>
     <string name="app_brief_description">While navigating with Google Maps or any other
-        application in the background, OpenDash will record what happens on the road using
+        application in the background, Sentry will record what happens on the road using
         your phone camera.</string>
 
     <string name="recording_automatic_heading">Recording starts automatically</string>
@@ -88,15 +88,15 @@ Starred recordings will not be deleted.</string>
     <string name="overheat_warning_text">Battery temperature is %1$d\u00B0C. Consider cooling the
         phone or stopping recording to protect battery health.</string>
     <string name="low_battery_shutdown_message">Battery low (%1$d%%) and not charging. Saving the
-        current clip and shutting down OpenDash.</string>
+        current clip and shutting down Sentry.</string>
     <string name="auto_stop_discharge_message">Charger disconnected. Saving the current clip and
-        stopping OpenDash.</string>
+        stopping Sentry.</string>
     <string name="title_activity_welcome">WelcomeActivity</string>
 
     <string name="recordings_list_empty_message_title">No recordings yet</string>
     <string name="recordings_list_empty_message">Start a drive to record your first clip.</string>
     <string name="title_activity_view_recordings">Recordings</string>
 
-    <string name="notification_title">OpenDash recording</string>
+    <string name="notification_title">Sentry recording</string>
     <string name="notification_text">Video recording in progress</string>
 </resources>
