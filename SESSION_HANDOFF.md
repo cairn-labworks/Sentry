@@ -205,7 +205,11 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       Note: verified 1s refresh (clock + REC timer advancing), GPS fix (12.90°, 77.71°), speed,
       colored temperature, storage, and event log ("New clip…", "Recording started"). Fixed a
       landscape bug where the event log was pushed off-screen — added layout-land variant (commit 8a6cedb).
-- [ ] Overheat alert fires above threshold; low-battery auto-shutdown works when enabled + unplugged.
+- [x] Overheat alert fires above threshold; low-battery auto-shutdown works when enabled + unplugged.
+      Note: overheat verified via `dumpsys battery set temp 460` (46°C ≥ 45°C default) → "Phone
+      overheating" notification + toast. Low-battery verified by enabling the toggle and dropping
+      level to 10% while unplugged (isolated from unplug auto-stop by starting already-unplugged at
+      50%): services + media codec shut down cleanly only at 10%, not at 50%.
 - [~] **Dark mode**: toggle system dark theme → all screens adapt.
 - [x] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
       Note: unplug auto-stop verified via `dumpsys battery unplug` (WidgetService runtime receiver).
