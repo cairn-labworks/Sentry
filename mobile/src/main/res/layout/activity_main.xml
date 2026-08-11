@@ -165,20 +165,4 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Add homescreen shortcut -->
-    <TextView
-        android:id="@+id/btn_add_shortcut"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/bg_storage_card"
-        android:clickable="true"
-        android:focusable="true"
-        android:drawablePadding="8dp"
-        android:gravity="center"
-        android:text="Add \u201CStart Recording\u201D to home screen"
-        android:textColor="@color/colorPrimary"
-        android:textSize="15sp"
-        android:textStyle="bold" />
-
 </LinearLayout>

@@ -30,8 +30,8 @@ recordings browser, safety automation, and more.
 - **Live view** — a real-time preview with GPS/speed HUD that updates every second.
 - **On-screen widget** — a draggable REC widget floats over other apps; tap it to open a quick
   menu (view recordings, save recording, settings, quit).
-- **Home-screen shortcut** — add a "Start Recording" launcher shortcut that begins recording
-  immediately.
+- **Home-screen shortcut** — add a "Start Recording" launcher shortcut (from **Settings**) that
+  begins recording immediately.
 - **Resolution options** — choose recording resolution; 4K/UHD is offered only on devices whose
   camera reports UHD support to CameraX.
 - **Scheduled night mode** — enable a schedule (default 6:00 PM → 6:00 AM, phone local time) via

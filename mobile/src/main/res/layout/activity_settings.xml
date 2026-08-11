@@ -445,6 +445,36 @@
 
                 <View style="@style/SettingsDivider" />
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SettingsItemTitle"
+                        android:text="Add “Start Recording” to home screen" />
+
+                    <TextView
+                        style="@style/SettingsItemSubtitle"
+                        android:text="Places a shortcut on your launcher that starts recording instantly. Remove it from the home screen when no longer needed." />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btn_add_shortcut"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_storage_card"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Add to home screen"
+                    android:textColor="@color/colorPrimary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <View style="@style/SettingsDivider" />
+
                 <TextView
                     android:id="@+id/btn_delete_all"
                     android:layout_width="match_parent"

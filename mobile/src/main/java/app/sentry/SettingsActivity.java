@@ -1,7 +1,12 @@
 package app.sentry;
 
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.Icon;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.util.TypedValue;
@@ -11,6 +16,7 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.TimePicker;
+import android.widget.Toast;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
@@ -63,6 +69,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupStorage();
         setupSafety();
         setupGeneral();
+        setupShortcut();
     }
 
     @Override
@@ -286,6 +293,45 @@ public class SettingsActivity extends AppCompatActivity {
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton("Delete all", (d, w) -> Util.deleteRecordings())
                 .show());
+    }
+
+    /**
+     * Wires the "Add to home screen" action row. Tapping it asks the launcher to pin a
+     * "Start Recording" shortcut that opens the app straight into recording. This is add-only:
+     * Android provides no reliable API to remove a user-pinned shortcut, so removal is done by the
+     * user from the launcher.
+     */
+    private void setupShortcut() {
+        TextView addShortcut = findViewById(R.id.btn_add_shortcut);
+        addShortcut.setOnClickListener(v -> addStartRecordingShortcut());
+    }
+
+    private void addStartRecordingShortcut() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Toast.makeText(this, "Home-screen shortcuts require Android 8 or newer.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
+        if (shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported()) {
+            Toast.makeText(this, "Your launcher doesn't support pinned shortcuts.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Intent shortcutIntent = new Intent(this, MainActivity.class);
+        shortcutIntent.setAction(Intent.ACTION_VIEW);
+        shortcutIntent.putExtra(MainActivity.EXTRA_START_RECORDING, true);
+        shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        ShortcutInfo shortcut = new ShortcutInfo.Builder(this, "start_recording")
+                .setShortLabel("Start Recording")
+                .setLongLabel("Start Dashcam Recording")
+                .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                .setIntent(shortcutIntent)
+                .build();
+
+        shortcutManager.requestPinShortcut(shortcut, null);
     }
 
     /**
