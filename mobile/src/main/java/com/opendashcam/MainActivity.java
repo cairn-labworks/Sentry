@@ -106,13 +106,58 @@ public class MainActivity extends AppCompatActivity {
         mRecSubtitle = findViewById(R.id.rec_subtitle);
 
         findViewById(R.id.btn_rec).setOnClickListener(v -> onRecClicked());
-        findViewById(R.id.btn_settings).setOnClickListener(v ->
-                startActivity(new Intent(this, SettingsActivity.class)));
+        ImageView themeBtn = findViewById(R.id.btn_settings);
+        themeBtn.setContentDescription("Switch theme");
+        themeBtn.setOnClickListener(v -> cycleTheme());
+        updateThemeIcon();
         findViewById(R.id.card_settings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         findViewById(R.id.card_recordings).setOnClickListener(v ->
                 startActivity(new Intent(this, ViewRecordingsActivity.class)));
         findViewById(R.id.btn_add_shortcut).setOnClickListener(v -> addStartRecordingShortcut());
+    }
+
+    /** Cycles the app theme System -> Light -> Dark -> System and applies it immediately. */
+    private void cycleTheme() {
+        String current = Util.getThemeMode();
+        String next;
+        String label;
+        switch (current) {
+            case Util.THEME_SYSTEM:
+                next = Util.THEME_LIGHT;
+                label = "Light";
+                break;
+            case Util.THEME_LIGHT:
+                next = Util.THEME_DARK;
+                label = "Dark";
+                break;
+            default:
+                next = Util.THEME_SYSTEM;
+                label = "System default";
+                break;
+        }
+        Toast.makeText(this, "Theme: " + label, Toast.LENGTH_SHORT).show();
+        // Applies the mode; if it changes the effective night setting the activity recreates.
+        Util.setThemeMode(next);
+        updateThemeIcon();
+    }
+
+    /** Sets the top-right icon to reflect the current theme mode. */
+    private void updateThemeIcon() {
+        ImageView themeBtn = findViewById(R.id.btn_settings);
+        int icon;
+        switch (Util.getThemeMode()) {
+            case Util.THEME_LIGHT:
+                icon = R.drawable.ic_theme_light;
+                break;
+            case Util.THEME_DARK:
+                icon = R.drawable.ic_theme_dark;
+                break;
+            default:
+                icon = R.drawable.ic_theme_system;
+                break;
+        }
+        themeBtn.setImageResource(icon);
     }
 
     private void onRecClicked() {

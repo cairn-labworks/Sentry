@@ -17,6 +17,7 @@ import android.content.SharedPreferences;
 import android.media.CamcorderProfile;
 import android.preference.PreferenceManager;
 import androidx.core.app.NotificationCompat;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.core.os.EnvironmentCompat;
@@ -129,10 +130,90 @@ public final class Util {
     }
 
     /**
-     * Preferred vertical video resolution (720 or 1080). Defaults to 1080.
+     * Preferred vertical video resolution (720, 1080 or 2160). Defaults to 1080.
      */
     public static int getVideoResolution() {
         return getIntPref("video_resolution", 1080);
+    }
+
+    // --- Theme (light/dark/system) ---
+
+    public static final String THEME_SYSTEM = "system";
+    public static final String THEME_LIGHT = "light";
+    public static final String THEME_DARK = "dark";
+
+    /**
+     * The user's chosen theme mode: {@link #THEME_SYSTEM} (default), {@link #THEME_LIGHT} or
+     * {@link #THEME_DARK}.
+     */
+    public static String getThemeMode() {
+        return getPrefs().getString("theme_mode", THEME_SYSTEM);
+    }
+
+    /**
+     * Persists the theme mode and applies it immediately (recreating visible activities).
+     */
+    public static void setThemeMode(String mode) {
+        getPrefs().edit().putString("theme_mode", mode).apply();
+        applyThemeMode(mode);
+    }
+
+    /** Applies the stored theme mode; call once at app startup. */
+    public static void applyStoredTheme() {
+        applyThemeMode(getThemeMode());
+    }
+
+    private static void applyThemeMode(String mode) {
+        switch (mode) {
+            case THEME_LIGHT:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+                break;
+            case THEME_DARK:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+                break;
+            default:
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+                break;
+        }
+    }
+
+    // --- Night mode (camera scene mode + optional schedule) ---
+
+    /** Whether the scheduled night mode feature is enabled. */
+    public static boolean isNightModeEnabled() {
+        return getPrefs().getBoolean("enable_night_mode", false);
+    }
+
+    /** Hour of day (0-23) at which night mode turns on. Defaults to 19 (7 PM). */
+    public static int getNightStartHour() {
+        return getIntPref("night_start_hour", 19);
+    }
+
+    /** Hour of day (0-23) at which night mode turns off. Defaults to 6 (6 AM). */
+    public static int getNightEndHour() {
+        return getIntPref("night_end_hour", 6);
+    }
+
+    /**
+     * Whether night mode should be active right now, based on the enable flag and the
+     * scheduled start/end hours (with midnight wrap-around). When start == end the schedule
+     * is treated as always-on.
+     */
+    public static boolean isNightModeActiveNow() {
+        if (!isNightModeEnabled()) {
+            return false;
+        }
+        int start = getNightStartHour();
+        int end = getNightEndHour();
+        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        if (start == end) {
+            return true;
+        }
+        if (start < end) {
+            return hour >= start && hour < end;
+        }
+        // Range wraps past midnight, e.g. 19:00 -> 06:00
+        return hour >= start || hour < end;
     }
 
     /**
@@ -141,6 +222,9 @@ public final class Util {
      */
     public static int getVideoQuality() {
         int res = getVideoResolution();
+        if (res >= 2160 && CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_2160P)) {
+            return CamcorderProfile.QUALITY_2160P;
+        }
         if (res >= 1080 && CamcorderProfile.hasProfile(CamcorderProfile.QUALITY_1080P)) {
             return CamcorderProfile.QUALITY_1080P;
         }

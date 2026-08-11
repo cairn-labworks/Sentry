@@ -147,7 +147,9 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     }
 
     private void refreshResFps() {
-        mResFps.setText(Util.getVideoResolution() + "P \u00B7 30 FPS");
+        int res = Util.getVideoResolution();
+        String label = (res >= 2160) ? "4K" : (res + "P");
+        mResFps.setText(label + " \u00B7 30 FPS");
     }
 
     private void refreshRecStatus(long now) {

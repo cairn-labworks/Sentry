@@ -221,16 +221,37 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
 - [x] Turn **location off** → recording and Recordings/HUD do not crash.
       Note: with system Location OFF, recording starts/writes normally and the Live view HUD shows
       GPS "Acquiring…" (speed 0 km/h) with no crash — logcat clean, no FATAL/AndroidRuntime.
-- [x] Play a clip → its GPS **metadata** is present (in a player/details view). 
-- [   Note: recorder now embeds an ISO 6709 location tag via FileOutputOptions.setLocation()
+- [x] Play a clip → its GPS **metadata** is present (in a player/details view).
+      Note: recorder now embeds an ISO 6709 location tag via FileOutputOptions.setLocation()
       (commit c870ce3). Verified with ffprobe: location=+12.9029+077.7099/. Previously absent.
 
-- [ ] 4K resolution support. only available if device camera supports it.
-- [ ] Since a large Settings button is already available on home screen, we can tunr the settings icon on top right into dark/light mode switcher with appropriate icon.
-- [ ] Night mode in camera if its possible. And if possible, allow a feature to sett automatic switching recording to night mode (from next recording onwards if recording is already running) during configured hours of the day
--
-
 ## 7. Possible next steps / open items
+
+### Requested features (code complete — pending on-device verification)
+
+- [~] **4K resolution support** — DONE (code). Settings → Resolution asynchronously queries
+      CameraX `Recorder.getVideoCapabilities(backCameraInfo).getSupportedQualities(SDR)` and adds a
+      "4K" (2160) segment only if `Quality.UHD` is supported; `BackgroundVideoRecorder.bindUseCases()`
+      maps res≥2160→`Quality.UHD`; `LiveViewActivity` shows "4K". VERIFIED on `a6dfe68`: this
+      Find X2's back camera reports only FHD/HD/SD to CameraX (OPPO gates true 4K behind its
+      proprietary HAL — the raw sensor exposes 3840x2160 but CameraX's Recorder can't use it), so
+      the 4K segment correctly does NOT appear here. It will appear on devices where CameraX
+      reports UHD. (Legacy `CamcorderProfile.hasProfile(2160P)` was tried first but under-reports.)
+- [~] **Theme switcher on the home settings icon** — DONE (code). Top-right gear now cycles
+      System → Light → Dark (Toast + icon swap via `ic_theme_{system,light,dark}.xml`);
+      `Util.setThemeMode()` persists `theme_mode` and applies via `AppCompatDelegate`;
+      `OpenDashApp` applies the stored theme at startup. The large Settings card still opens Settings.
+- [~] **Camera night mode + schedule** — DONE (code). New Settings "Night mode" card: a switch
+      (`enable_night_mode`) plus two 0–23 hour sliders (`night_start_hour` default 19,
+      `night_end_hour` default 6). `Util.isNightModeActiveNow()` handles midnight wrap.
+      `BackgroundVideoRecorder.applyNightMode()` sets Camera2 `CONTROL_SCENE_MODE_NIGHT`
+      (gated on `CONTROL_AVAILABLE_SCENE_MODES`) at each segment boundary, logging engage/disengage.
+      Night-scene visual effect is device-dependent and not verifiable from a screenshot.
+
+All three are built and installed on `a6dfe68`. On-device verification is BLOCKED: the phone
+re-locked with a keyguard (face-unlock), which adb can't bypass. Needs the user to unlock the device.
+
+### Longer-term ideas
 
 - Front camera support / frame-rate option.
 - G-Sensor (accelerometer) impact auto-lock of the current clip.

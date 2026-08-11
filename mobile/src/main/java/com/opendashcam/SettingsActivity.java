@@ -14,9 +14,17 @@ import android.widget.TextView;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.CameraInfo;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.DynamicRange;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.Quality;
+import androidx.camera.video.Recorder;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.slider.Slider;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.File;
 import java.util.Locale;
@@ -50,6 +58,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         setupClipLength();
         setupResolution();
+        setupNightMode();
         setupStorage();
         setupSafety();
         setupGeneral();
@@ -73,11 +82,71 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupResolution() {
-        buildSegmented(findViewById(R.id.group_res),
-                new String[]{"720p", "1080p"},
-                new int[]{720, 1080},
+        // Build with the always-available options first, then asynchronously upgrade to include
+        // 4K if the back camera actually supports UHD video (queried through CameraX, which is
+        // more reliable than the legacy CamcorderProfile API on some vendor ROMs).
+        buildResolutionRow(false);
+
+        final ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
+        future.addListener(() -> {
+            try {
+                ProcessCameraProvider provider = future.get();
+                CameraInfo info = provider.getCameraInfo(CameraSelector.DEFAULT_BACK_CAMERA);
+                if (info != null && Recorder.getVideoCapabilities(info)
+                        .getSupportedQualities(DynamicRange.SDR).contains(Quality.UHD)) {
+                    buildResolutionRow(true);
+                }
+            } catch (Exception e) {
+                // Leave the 720p/1080p row as-is if detection fails.
+            }
+        }, ContextCompat.getMainExecutor(this));
+    }
+
+    private void buildResolutionRow(boolean includeUhd) {
+        String[] labels = includeUhd
+                ? new String[]{"720p", "1080p", "4K"}
+                : new String[]{"720p", "1080p"};
+        int[] values = includeUhd
+                ? new int[]{720, 1080, 2160}
+                : new int[]{720, 1080};
+        buildSegmented(findViewById(R.id.group_res), labels, values,
                 Util.getVideoResolution(),
                 value -> prefs.edit().putString("video_resolution", String.valueOf(value)).apply());
+    }
+
+    private void setupNightMode() {
+        SwitchMaterial night = findViewById(R.id.switch_night);
+        night.setChecked(Util.isNightModeEnabled());
+        night.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_night_mode", checked).apply());
+
+        final Slider startSlider = findViewById(R.id.night_start_slider);
+        final TextView startValue = findViewById(R.id.night_start_value);
+        startSlider.setValue(clampHour(Util.getNightStartHour()));
+        startValue.setText(formatHour(Util.getNightStartHour()));
+        startSlider.addOnChangeListener((s, v, fromUser) -> {
+            int hour = (int) v;
+            startValue.setText(formatHour(hour));
+            prefs.edit().putString("night_start_hour", String.valueOf(hour)).apply();
+        });
+
+        final Slider endSlider = findViewById(R.id.night_end_slider);
+        final TextView endValue = findViewById(R.id.night_end_value);
+        endSlider.setValue(clampHour(Util.getNightEndHour()));
+        endValue.setText(formatHour(Util.getNightEndHour()));
+        endSlider.addOnChangeListener((s, v, fromUser) -> {
+            int hour = (int) v;
+            endValue.setText(formatHour(hour));
+            prefs.edit().putString("night_end_hour", String.valueOf(hour)).apply();
+        });
+    }
+
+    private static int clampHour(int hour) {
+        return Math.max(0, Math.min(23, hour));
+    }
+
+    private static String formatHour(int hour) {
+        return String.format(Locale.US, "%02d:00", clampHour(hour));
     }
 
     private void setupStorage() {

@@ -82,10 +82,14 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private PowerManager.WakeLock mWakeLock;
 
     private ProcessCameraProvider mCameraProvider;
+    private androidx.camera.core.Camera mCamera;
     private Recorder mRecorder;
     private VideoCapture<Recorder> mVideoCapture;
     private OverlayEffect mOverlayEffect;
     private androidx.camera.video.Recording mActiveRecording;
+
+    // Tracks the currently-applied night-mode state so we only re-apply/log on transitions.
+    private Boolean mNightAppliedState = null;
 
     private HandlerThread mGlThread;
     private Handler mGlHandler;
@@ -189,7 +193,14 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
     private void bindUseCases() {
         int res = Util.getVideoResolution();
-        Quality quality = (res >= 1080) ? Quality.FHD : Quality.HD;
+        Quality quality;
+        if (res >= 2160) {
+            quality = Quality.UHD;
+        } else if (res >= 1080) {
+            quality = Quality.FHD;
+        } else {
+            quality = Quality.HD;
+        }
         QualitySelector qualitySelector = QualitySelector.from(
                 quality, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD));
 
@@ -217,7 +228,72 @@ public class BackgroundVideoRecorder extends LifecycleService {
                 .build();
 
         mCameraProvider.unbindAll();
-        mCameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group);
+        mCamera = mCameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group);
+        // Reset so the first segment always applies the current night-mode state.
+        mNightAppliedState = null;
+    }
+
+    /**
+     * Applies (or clears) the camera night scene mode based on the user's schedule. Re-evaluated
+     * at each segment boundary so the schedule takes effect without restarting recording. Only
+     * re-applies and logs when the desired state changes. Night scene mode is gated on the camera
+     * actually advertising CONTROL_SCENE_MODE_NIGHT.
+     */
+    @SuppressLint("UnsafeOptInUsageError")
+    private void applyNightMode() {
+        if (mCamera == null) {
+            return;
+        }
+        boolean night = Util.isNightModeActiveNow();
+        if (mNightAppliedState != null && mNightAppliedState == night) {
+            return;
+        }
+        try {
+            androidx.camera.camera2.interop.Camera2CameraInfo camInfo =
+                    androidx.camera.camera2.interop.Camera2CameraInfo.from(mCamera.getCameraInfo());
+            int[] scenes = camInfo.getCameraCharacteristic(
+                    android.hardware.camera2.CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES);
+            boolean nightSupported = false;
+            if (scenes != null) {
+                for (int s : scenes) {
+                    if (s == android.hardware.camera2.CameraMetadata.CONTROL_SCENE_MODE_NIGHT) {
+                        nightSupported = true;
+                        break;
+                    }
+                }
+            }
+
+            androidx.camera.camera2.interop.Camera2CameraControl control =
+                    androidx.camera.camera2.interop.Camera2CameraControl.from(mCamera.getCameraControl());
+            androidx.camera.camera2.interop.CaptureRequestOptions.Builder builder =
+                    new androidx.camera.camera2.interop.CaptureRequestOptions.Builder();
+
+            if (night && nightSupported) {
+                builder.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.CONTROL_MODE,
+                        android.hardware.camera2.CameraMetadata.CONTROL_MODE_USE_SCENE_MODE);
+                builder.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.CONTROL_SCENE_MODE,
+                        android.hardware.camera2.CameraMetadata.CONTROL_SCENE_MODE_NIGHT);
+            } else {
+                builder.setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.CONTROL_MODE,
+                        android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO);
+            }
+            control.setCaptureRequestOptions(builder.build());
+
+            Log.i(TAG, "Night mode -> " + night + " (cameraSupportsNightScene=" + nightSupported + ")");
+            if (night) {
+                Util.logEvent(nightSupported
+                        ? "Night mode engaged"
+                        : "Night mode scheduled (camera does not support night scene)");
+            } else if (mNightAppliedState != null) {
+                Util.logEvent("Night mode disengaged");
+            }
+            mNightAppliedState = night;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to apply night mode", e);
+        }
     }
 
     // --- Loop recording (segment chaining) ---
@@ -225,6 +301,9 @@ public class BackgroundVideoRecorder extends LifecycleService {
     @SuppressLint("MissingPermission")
     private void startNextSegment() {
         if (mStopping || mRecorder == null) return;
+
+        // Re-evaluate the night-mode schedule at each segment boundary.
+        applyNightMode();
 
         // Housekeeping before each segment
         rotateRecordings(BackgroundVideoRecorder.this, Util.getQuota());
