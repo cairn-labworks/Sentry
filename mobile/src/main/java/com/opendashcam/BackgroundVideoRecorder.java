@@ -97,6 +97,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private volatile boolean mHasLocation = false;
     private volatile double mLat = 0, mLng = 0;
     private volatile float mSpeedKmh = 0;
+    private volatile Location mLastLocation = null;
 
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -107,6 +108,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
             mLat = location.getLatitude();
             mLng = location.getLongitude();
             mSpeedKmh = location.hasSpeed() ? location.getSpeed() * 3.6f : 0f;
+            mLastLocation = location;
             mHasLocation = true;
         }
 
@@ -239,9 +241,15 @@ public class BackgroundVideoRecorder extends LifecycleService {
         editor.apply();
 
         File outFile = new File(currentVideoFile);
-        FileOutputOptions outputOptions = new FileOutputOptions.Builder(outFile)
-                .setDurationLimitMillis(Util.getMaxDuration())
-                .build();
+        FileOutputOptions.Builder outputOptionsBuilder = new FileOutputOptions.Builder(outFile)
+                .setDurationLimitMillis(Util.getMaxDuration());
+        // Embed the last known GPS fix as clip metadata so players/details views can show
+        // where the clip was recorded (in addition to the burned-in overlay).
+        Location lastLocation = mLastLocation;
+        if (lastLocation != null) {
+            outputOptionsBuilder.setLocation(lastLocation);
+        }
+        FileOutputOptions outputOptions = outputOptionsBuilder.build();
 
         PendingRecording pending = mRecorder.prepareRecording(this, outputOptions);
         boolean audio = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
