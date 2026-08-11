@@ -184,36 +184,47 @@ public final class Util {
         return getPrefs().getBoolean("enable_night_mode", false);
     }
 
-    /** Hour of day (0-23) at which night mode turns on. Defaults to 19 (7 PM). */
-    public static int getNightStartHour() {
-        return getIntPref("night_start_hour", 19);
+    /** Minute-of-day (0-1439) at which night mode turns on. Defaults to 1080 (6:00 PM). */
+    public static int getNightStartMinutes() {
+        return getIntPref("night_start_min", 18 * 60);
     }
 
-    /** Hour of day (0-23) at which night mode turns off. Defaults to 6 (6 AM). */
-    public static int getNightEndHour() {
-        return getIntPref("night_end_hour", 6);
+    /** Minute-of-day (0-1439) at which night mode turns off. Defaults to 360 (6:00 AM). */
+    public static int getNightEndMinutes() {
+        return getIntPref("night_end_min", 6 * 60);
+    }
+
+    /** Persists the minute-of-day (0-1439) at which night mode turns on. */
+    public static void setNightStartMinutes(int minutes) {
+        getPrefs().edit().putString("night_start_min", String.valueOf(minutes)).apply();
+    }
+
+    /** Persists the minute-of-day (0-1439) at which night mode turns off. */
+    public static void setNightEndMinutes(int minutes) {
+        getPrefs().edit().putString("night_end_min", String.valueOf(minutes)).apply();
     }
 
     /**
      * Whether night mode should be active right now, based on the enable flag and the
-     * scheduled start/end hours (with midnight wrap-around). When start == end the schedule
+     * scheduled start/end times (with midnight wrap-around). When start == end the schedule
      * is treated as always-on.
      */
     public static boolean isNightModeActiveNow() {
         if (!isNightModeEnabled()) {
             return false;
         }
-        int start = getNightStartHour();
-        int end = getNightEndHour();
-        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        int start = getNightStartMinutes();
+        int end = getNightEndMinutes();
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        int now = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
         if (start == end) {
             return true;
         }
         if (start < end) {
-            return hour >= start && hour < end;
+            return now >= start && now < end;
         }
-        // Range wraps past midnight, e.g. 19:00 -> 06:00
-        return hour >= start || hour < end;
+        // Range wraps past midnight, e.g. 18:00 -> 06:00
+        return now >= start || now < end;
     }
 
     /**

@@ -10,6 +10,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.TimePicker;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
@@ -115,38 +116,101 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupNightMode() {
-        SwitchMaterial night = findViewById(R.id.switch_night);
+        final SwitchMaterial night = findViewById(R.id.switch_night);
+        final View panel = findViewById(R.id.night_schedule_panel);
+        final TextView startChip = findViewById(R.id.night_start_chip);
+        final TextView endChip = findViewById(R.id.night_end_chip);
+        final TimePicker picker = findViewById(R.id.night_time_picker);
+        picker.setIs24HourView(false);
+
         night.setChecked(Util.isNightModeEnabled());
-        night.setOnCheckedChangeListener((b, checked) ->
-                prefs.edit().putBoolean("enable_night_mode", checked).apply());
-
-        final Slider startSlider = findViewById(R.id.night_start_slider);
-        final TextView startValue = findViewById(R.id.night_start_value);
-        startSlider.setValue(clampHour(Util.getNightStartHour()));
-        startValue.setText(formatHour(Util.getNightStartHour()));
-        startSlider.addOnChangeListener((s, v, fromUser) -> {
-            int hour = (int) v;
-            startValue.setText(formatHour(hour));
-            prefs.edit().putString("night_start_hour", String.valueOf(hour)).apply();
+        panel.setVisibility(Util.isNightModeEnabled() ? View.VISIBLE : View.GONE);
+        night.setOnCheckedChangeListener((b, checked) -> {
+            prefs.edit().putBoolean("enable_night_mode", checked).apply();
+            panel.setVisibility(checked ? View.VISIBLE : View.GONE);
         });
 
-        final Slider endSlider = findViewById(R.id.night_end_slider);
-        final TextView endValue = findViewById(R.id.night_end_value);
-        endSlider.setValue(clampHour(Util.getNightEndHour()));
-        endValue.setText(formatHour(Util.getNightEndHour()));
-        endSlider.addOnChangeListener((s, v, fromUser) -> {
-            int hour = (int) v;
-            endValue.setText(formatHour(hour));
-            prefs.edit().putString("night_end_hour", String.valueOf(hour)).apply();
+        startChip.setText(formatMinutes(Util.getNightStartMinutes()));
+        endChip.setText(formatMinutes(Util.getNightEndMinutes()));
+        styleTimeChip(startChip, false);
+        styleTimeChip(endChip, false);
+
+        // editing[0]: 0 = editing start, 1 = editing end, -1 = collapsed.
+        final int[] editing = {-1};
+        // Guards the change listener while we set the picker programmatically.
+        final boolean[] suppress = {false};
+
+        picker.setOnTimeChangedListener((view, hourOfDay, minute) -> {
+            if (suppress[0]) {
+                return;
+            }
+            int mins = hourOfDay * 60 + minute;
+            if (editing[0] == 0) {
+                Util.setNightStartMinutes(mins);
+                startChip.setText(formatMinutes(mins));
+            } else if (editing[0] == 1) {
+                Util.setNightEndMinutes(mins);
+                endChip.setText(formatMinutes(mins));
+            }
+        });
+
+        startChip.setOnClickListener(v -> {
+            if (editing[0] == 0 && picker.getVisibility() == View.VISIBLE) {
+                picker.setVisibility(View.GONE);
+                editing[0] = -1;
+                styleTimeChip(startChip, false);
+                return;
+            }
+            editing[0] = 0;
+            styleTimeChip(startChip, true);
+            styleTimeChip(endChip, false);
+            setPickerTo(picker, suppress, Util.getNightStartMinutes());
+            picker.setVisibility(View.VISIBLE);
+        });
+
+        endChip.setOnClickListener(v -> {
+            if (editing[0] == 1 && picker.getVisibility() == View.VISIBLE) {
+                picker.setVisibility(View.GONE);
+                editing[0] = -1;
+                styleTimeChip(endChip, false);
+                return;
+            }
+            editing[0] = 1;
+            styleTimeChip(endChip, true);
+            styleTimeChip(startChip, false);
+            setPickerTo(picker, suppress, Util.getNightEndMinutes());
+            picker.setVisibility(View.VISIBLE);
         });
     }
 
-    private static int clampHour(int hour) {
-        return Math.max(0, Math.min(23, hour));
+    private void setPickerTo(TimePicker picker, boolean[] suppress, int minutes) {
+        suppress[0] = true;
+        picker.setHour(minutes / 60);
+        picker.setMinute(minutes % 60);
+        suppress[0] = false;
     }
 
-    private static String formatHour(int hour) {
-        return String.format(Locale.US, "%02d:00", clampHour(hour));
+    private void styleTimeChip(TextView chip, boolean selected) {
+        if (selected) {
+            chip.setBackgroundResource(R.drawable.seg_selected);
+            chip.setTextColor(0xFFFFFFFF);
+            chip.setTypeface(null, Typeface.BOLD);
+        } else {
+            chip.setBackgroundColor(0x00000000);
+            chip.setTextColor(getResources().getColor(R.color.colorTextPrimary));
+            chip.setTypeface(null, Typeface.NORMAL);
+        }
+    }
+
+    private static String formatMinutes(int minutes) {
+        int m = ((minutes % 1440) + 1440) % 1440;
+        int h = m / 60;
+        int min = m % 60;
+        int hour12 = h % 12;
+        if (hour12 == 0) {
+            hour12 = 12;
+        }
+        return String.format(Locale.US, "%d:%02d %s", hour12, min, h < 12 ? "AM" : "PM");
     }
 
     private void setupStorage() {

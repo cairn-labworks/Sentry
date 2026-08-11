@@ -87,7 +87,7 @@
 
                         <TextView
                             style="@style/SettingsItemSubtitle"
-                            android:text="Automatically switch the camera to night scene mode during the hours below (if the camera supports it)" />
+                            android:text="Automatically switch the camera to night scene mode during the scheduled time (if the camera supports it)" />
                     </LinearLayout>
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
@@ -97,67 +97,68 @@
                         android:layout_gravity="center_vertical" />
                 </LinearLayout>
 
-                <View style="@style/SettingsDivider" />
-
+                <!-- Schedule editor: only visible while the switch is on. -->
                 <LinearLayout
+                    android:id="@+id/night_schedule_panel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:orientation="vertical"
+                    android:visibility="gone">
 
-                    <TextView
-                        style="@style/SettingsItemTitle"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:text="Turns on at" />
+                    <View style="@style/SettingsDivider" />
 
-                    <TextView
-                        android:id="@+id/night_start_value"
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/night_start_chip"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:paddingTop="10dp"
+                            android:paddingBottom="10dp"
+                            android:text="6:00 PM"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            android:text="\u2192"
+                            android:textColor="@color/colorTextSecondary"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:id="@+id/night_end_chip"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:paddingTop="10dp"
+                            android:paddingBottom="10dp"
+                            android:text="6:00 AM"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <TimePicker
+                        android:id="@+id/night_time_picker"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical"
-                        android:text="19:00"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="8dp"
+                        android:timePickerMode="spinner"
+                        android:visibility="gone" />
                 </LinearLayout>
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/night_start_slider"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="23" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        style="@style/SettingsItemTitle"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:text="Turns off at" />
-
-                    <TextView
-                        android:id="@+id/night_end_value"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical"
-                        android:text="06:00"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/night_end_slider"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="23" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

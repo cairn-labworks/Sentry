@@ -227,9 +227,9 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
 
 ## 7. Possible next steps / open items
 
-### Requested features (code complete — pending on-device verification)
+### Requested features (implemented & verified on-device)
 
-- [~] **4K resolution support** — DONE (code). Settings → Resolution asynchronously queries
+- [x] **4K resolution support** — DONE & VERIFIED. Settings → Resolution asynchronously queries
       CameraX `Recorder.getVideoCapabilities(backCameraInfo).getSupportedQualities(SDR)` and adds a
       "4K" (2160) segment only if `Quality.UHD` is supported; `BackgroundVideoRecorder.bindUseCases()`
       maps res≥2160→`Quality.UHD`; `LiveViewActivity` shows "4K". VERIFIED on `a6dfe68`: this
@@ -237,19 +237,25 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       proprietary HAL — the raw sensor exposes 3840x2160 but CameraX's Recorder can't use it), so
       the 4K segment correctly does NOT appear here. It will appear on devices where CameraX
       reports UHD. (Legacy `CamcorderProfile.hasProfile(2160P)` was tried first but under-reports.)
-- [~] **Theme switcher on the home settings icon** — DONE (code). Top-right gear now cycles
+- [x] **Theme switcher on the home settings icon** — DONE & VERIFIED. Top-right gear now cycles
       System → Light → Dark (Toast + icon swap via `ic_theme_{system,light,dark}.xml`);
       `Util.setThemeMode()` persists `theme_mode` and applies via `AppCompatDelegate`;
       `OpenDashApp` applies the stored theme at startup. The large Settings card still opens Settings.
-- [~] **Camera night mode + schedule** — DONE (code). New Settings "Night mode" card: a switch
-      (`enable_night_mode`) plus two 0–23 hour sliders (`night_start_hour` default 19,
-      `night_end_hour` default 6). `Util.isNightModeActiveNow()` handles midnight wrap.
-      `BackgroundVideoRecorder.applyNightMode()` sets Camera2 `CONTROL_SCENE_MODE_NIGHT`
-      (gated on `CONTROL_AVAILABLE_SCENE_MODES`) at each segment boundary, logging engage/disengage.
-      Night-scene visual effect is device-dependent and not verifiable from a screenshot.
+- [x] **Camera night mode + schedule** — DONE & VERIFIED. Settings "Night mode" card: a switch
+      (`enable_night_mode`). When enabled, a schedule panel reveals two tappable time chips
+      (`start → end`); tapping a chip highlights it and expands an inline spinner `TimePicker`
+      (hour : minute AM/PM) to edit that time. Times are stored as minute-of-day
+      (`night_start_min` default 1080 = 6:00 PM, `night_end_min` default 360 = 6:00 AM) in the
+      phone's local timezone. `Util.isNightModeActiveNow()` compares current minute-of-day with
+      midnight wrap-around. `BackgroundVideoRecorder.applyNightMode()` sets Camera2
+      `CONTROL_SCENE_MODE_NIGHT` (gated on `CONTROL_AVAILABLE_SCENE_MODES`) at each segment
+      boundary, logging engage/disengage. VERIFIED on `a6dfe68`: recorder logged
+      `Night mode -> true (cameraSupportsNightScene=true)`; the schedule UI hides when disabled,
+      shows correct 6PM→6AM defaults, and the inline picker edits persist live to prefs.
 
-All three are built and installed on `a6dfe68`. On-device verification is BLOCKED: the phone
-re-locked with a keyguard (face-unlock), which adb can't bypass. Needs the user to unlock the device.
+All three features are built, installed, and verified on `a6dfe68` (landscape). Theme switcher
+cycles System→Light→Dark and re-themes all screens; 4K is correctly hidden (this camera reports
+only FHD/HD/SD to CameraX); night mode engages on schedule with the new time-picker UI.
 
 ### Longer-term ideas
 
