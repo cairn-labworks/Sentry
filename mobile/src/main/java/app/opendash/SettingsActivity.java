@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.content.SharedPreferences;
 import android.graphics.Typeface;

@@ -1,4 +1,4 @@
-package com.opendashcam.models;
+package app.opendash.models;
 
 import android.app.Service;
 import android.content.Context;
@@ -18,12 +18,12 @@ import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 
-import com.opendashcam.BackgroundVideoRecorder;
-import com.opendashcam.LiveViewActivity;
-import com.opendashcam.R;
-import com.opendashcam.SettingsActivity;
-import com.opendashcam.Util;
-import com.opendashcam.ViewRecordingsActivity;
+import app.opendash.BackgroundVideoRecorder;
+import app.opendash.LiveViewActivity;
+import app.opendash.R;
+import app.opendash.SettingsActivity;
+import app.opendash.Util;
+import app.opendash.ViewRecordingsActivity;
 
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 

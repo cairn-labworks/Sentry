@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -10,7 +10,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.view.WindowManager;
 
-import com.opendashcam.models.Widget;
+import app.opendash.models.Widget;
 
 public class WidgetService extends Service {
 

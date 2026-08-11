@@ -1,10 +1,10 @@
-package com.opendashcam.models;
+package app.opendash.models;
 
 import android.text.TextUtils;
 
-import com.opendashcam.DBHelper;
-import com.opendashcam.OpenDashApp;
-import com.opendashcam.Util;
+import app.opendash.DBHelper;
+import app.opendash.OpenDashApp;
+import app.opendash.Util;
 
 import java.io.File;
 import java.text.SimpleDateFormat;

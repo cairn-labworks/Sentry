@@ -1,6 +1,6 @@
-package com.opendashcam;
+package app.opendash;
 
-import com.opendashcam.models.Recording;
+import app.opendash.models.Recording;
 
 import java.util.ArrayList;
 

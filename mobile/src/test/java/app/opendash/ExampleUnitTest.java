@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import org.junit.Test;
 

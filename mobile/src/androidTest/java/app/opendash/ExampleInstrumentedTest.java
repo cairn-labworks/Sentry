@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;

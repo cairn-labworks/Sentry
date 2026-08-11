@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -25,7 +25,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.opendashcam.models.Recording;
+import app.opendash.models.Recording;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -314,7 +314,7 @@ public final class Util {
 
     public static File getVideosDirectoryPath() {
         //remove an old directory if exists
-        File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/OpenDashCam/");
+        File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/OpenDash/");
         removeNonEmptyDirectory(oldDirectory);
 
         //New directory
@@ -378,7 +378,7 @@ public final class Util {
         try {
             context.startActivity(openFile);
         } catch (ActivityNotFoundException e) {
-            Log.i("OpenDashCam", "Cannot open file.");
+            Log.i("OpenDash", "Cannot open file.");
         }
     }
 

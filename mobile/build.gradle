@@ -1,11 +1,11 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace 'com.opendashcam'
+    namespace 'app.opendash'
     compileSdk 34
     buildToolsVersion '35.0.0'
     defaultConfig {
-        applicationId "com.opendashcam"
+        applicationId "app.opendash"
         minSdk 23
         targetSdk 33
         versionCode 6

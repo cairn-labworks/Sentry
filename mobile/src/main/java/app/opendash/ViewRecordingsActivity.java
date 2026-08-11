@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -20,7 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.tabs.TabLayout;
-import com.opendashcam.models.Recording;
+import app.opendash.models.Recording;
 
 import java.io.File;
 import java.util.ArrayList;

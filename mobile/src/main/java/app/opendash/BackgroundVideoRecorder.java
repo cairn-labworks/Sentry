@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -140,7 +140,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             mWakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK, "OpenDashCam:RecorderWakeLock");
+                    PowerManager.PARTIAL_WAKE_LOCK, "OpenDash:RecorderWakeLock");
             mWakeLock.acquire();
         }
 
@@ -352,7 +352,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
     private void onSegmentFinalized(VideoRecordEvent.Finalize event) {
         // A duration-limit finalize still produces a valid file
-        Util.insertNewRecording(new com.opendashcam.models.Recording(currentVideoFile));
+        Util.insertNewRecording(new app.opendash.models.Recording(currentVideoFile));
 
         if (!mStopping) {
             startNextSegment();
@@ -526,8 +526,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
             int starred_videos_total_size = 0;
 
             for (File fileInDirectory : videoFiles) {
-                com.opendashcam.models.Recording recording =
-                        new com.opendashcam.models.Recording(fileInDirectory.getAbsolutePath());
+                app.opendash.models.Recording recording =
+                        new app.opendash.models.Recording(fileInDirectory.getAbsolutePath());
                 if (recording.isStarred()) {
                     starred_videos_total_size += fileInDirectory.length() / (1024 * 1024);
                     continue;
@@ -544,7 +544,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
             if (oldestFile == null) break;
 
-            Util.deleteSingleRecording(new com.opendashcam.models.Recording(oldestFile.getAbsolutePath()));
+            Util.deleteSingleRecording(new app.opendash.models.Recording(oldestFile.getAbsolutePath()));
         }
 
         pruneEmptyDirectories(mRecordingsDirectory);

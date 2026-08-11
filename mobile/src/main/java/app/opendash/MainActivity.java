@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.Manifest;
 import android.app.NotificationManager;
@@ -36,7 +36,7 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
 
     /** When present and true, the activity immediately attempts to start recording (used by the shortcut). */
-    public static final String EXTRA_START_RECORDING = "com.opendashcam.START_RECORDING";
+    public static final String EXTRA_START_RECORDING = "app.opendash.START_RECORDING";
     private static final String SHORTCUT_ID = "start_recording";
 
     public static final int MULTIPLE_PERMISSIONS_RESPONSE_CODE = 10;

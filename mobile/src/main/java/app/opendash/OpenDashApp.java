@@ -1,4 +1,4 @@
-package com.opendashcam;
+package app.opendash;
 
 import android.app.Application;
 import android.content.Context;
