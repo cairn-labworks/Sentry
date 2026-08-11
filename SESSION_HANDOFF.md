@@ -185,16 +185,18 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
 - [x] New clips are **silent** (no per-clip beep).
       Note: no beep API in code (no MediaActionSound/ToneGenerator); app force-mutes STREAM_SYSTEM
       for the whole recording. Verified STREAM_SYSTEM muted during recording, no shutter/tone in logcat.
-- [~] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
+- [x] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
       verify text is upright and on-screen for your mount, and that clips chain every N minutes.
-      Note: date/time verified burned-in, upright, advancing per frame. GPS showed "acquiring…"
-      indoors (no fix) — needs an outdoor re-test.
+      Note: verified on an extracted frame — date/time (2026-08-11 09:21:38), GPS (12.90295, 77.70988)
+      and speed (0 km/h) burned in, upright, bottom-left. Clips chain per clip-length setting.
 - [~] **Settings**: every segmented option (Clip length, Resolution, Overheat temp, Low-battery %)
       is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
       Note: 1080p output verified via ffprobe; automation toggles verified persisting to prefs.
       Remaining segmented options not each exercised.
 - [x] **Delete all recordings** button looks right and shows a confirmation dialog.
-- [ ] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
+- [x] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
+      Note: verified by pushing a clip with a previous-hour mtime and starting a segment — the
+      organize step moved it to Movies/2026-08-11/08/… while the current-hour clip stayed flat.
 - [x] Recordings screen: count, total size, All/Starred tabs, delete-all, multi-select delete, empty state.
       Note: verified title count, header size, tab switching, long-press multi-select + confirm-dialog
       delete, and empty-state clapperboard on both tabs.
@@ -209,8 +211,12 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       Note: unplug auto-stop verified via `dumpsys battery unplug` (WidgetService runtime receiver).
       The manifest PowerConnectionReceiver is blocked in background by ColorOS for POWER_DISCONNECTED;
       POWER_CONNECTED still fires and auto-starts. See auto-stop fix in commit 583d58c.
-- [ ] Turn **location off** → recording and Recordings/HUD do not crash.
-- [ ] Play a clip → its GPS **metadata** is present (in a player/details view).
+- [x] Turn **location off** → recording and Recordings/HUD do not crash.
+      Note: with system Location OFF, recording starts/writes normally and the Live view HUD shows
+      GPS "Acquiring…" (speed 0 km/h) with no crash — logcat clean, no FATAL/AndroidRuntime.
+- [x] Play a clip → its GPS **metadata** is present (in a player/details view).
+      Note: recorder now embeds an ISO 6709 location tag via FileOutputOptions.setLocation()
+      (commit c870ce3). Verified with ffprobe: location=+12.9029+077.7099/. Previously absent.
 
 ---
 
