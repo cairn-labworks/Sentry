@@ -20,10 +20,9 @@ import android.view.animation.ScaleAnimation;
 
 import app.sentry.BackgroundVideoRecorder;
 import app.sentry.LiveViewActivity;
+import app.sentry.MainActivity;
 import app.sentry.R;
-import app.sentry.SettingsActivity;
 import app.sentry.Util;
-import app.sentry.ViewRecordingsActivity;
 
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
@@ -100,11 +99,9 @@ public class Widget {
     private class WidgetViewHolder implements View.OnClickListener {
         View rootView;
         View rootViewMenu;
-        View viewRecView;
-        View saveRecView;
         View liveViewView;
         View recView;
-        View settingsView;
+        View homeView;
         View stopAndQuitView;
         View layoutMenu;
         boolean areSecondaryWidgetsShown = false;
@@ -130,17 +127,13 @@ public class Widget {
             recView = rootView.findViewById(R.id.rec_button);
 
             rootViewMenu = LayoutInflater.from(context).inflate(R.layout.layout_widget_menu, null);
-            viewRecView = rootViewMenu.findViewById(R.id.view_recordings_button);
-            saveRecView = rootViewMenu.findViewById(R.id.save_recording_button);
             liveViewView = rootViewMenu.findViewById(R.id.live_view_button);
-            settingsView = rootViewMenu.findViewById(R.id.settings_button);
+            homeView = rootViewMenu.findViewById(R.id.home_button);
             stopAndQuitView = rootViewMenu.findViewById(R.id.stop_and_quit_button);
             layoutMenu = rootViewMenu.findViewById(R.id.layout_menu);
 
-            viewRecView.setOnClickListener(this);
-            saveRecView.setOnClickListener(this);
             liveViewView.setOnClickListener(this);
-            settingsView.setOnClickListener(this);
+            homeView.setOnClickListener(this);
             stopAndQuitView.setOnClickListener(this);
 
             // The REC button supports both tap (toggle menu) and long-press-drag (reposition)
@@ -227,53 +220,17 @@ public class Widget {
         @Override
         public void onClick(View v) {
             int id = v.getId();
-            if (id == R.id.view_recordings_button) {
-                Intent viewRecordingsIntent = new Intent(service, ViewRecordingsActivity.class);
-                viewRecordingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
-                service.startActivity(viewRecordingsIntent);
-                hideSecondaryWidgets();
-            } else if (id == R.id.save_recording_button) {
-                // Access shared references file
-                SharedPreferences sharedPref = service.getApplicationContext().getSharedPreferences(
-                        service.getString(R.string.current_recordings_preferences_key),
-                        Context.MODE_PRIVATE);
-
-                // Save video that is being recorded now
-                String currentVideoRecording = sharedPref.
-                        getString(service.getString(R.string.current_recording_preferences_key),
-                                "null");
-
-                if (currentVideoRecording != "null") {
-                    // star current recording
-                    Recording recording = new Recording(currentVideoRecording);
-                    recording.toggleStar(true);
-                }
-
-                // Save the oldest (previous) recording
-                String previousVideoRecording = sharedPref.
-                        getString(service.getString(R.string.previous_recording_preferences_key),
-                                "null");
-
-                if (previousVideoRecording != "null") {
-                    // star previous recording
-                    Recording recording = new Recording( 0, previousVideoRecording);
-                    recording.toggleStar(true);
-                }
-
-                // Show success message
-                Util.showToastLong(service, service.getString(R.string.save_recording_success_msg));
-            } else if (id == R.id.rec_button) {
+            if (id == R.id.rec_button) {
                 toggleSecondaryWidgets();
             } else if (id == R.id.live_view_button) {
                 Intent liveIntent = new Intent(service, LiveViewActivity.class);
                 liveIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
                 service.startActivity(liveIntent);
                 hideSecondaryWidgets();
-            } else if (id == R.id.settings_button) {
-                Intent settingsIntent = new Intent(service, SettingsActivity.class);
-                settingsIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
-                service.startActivity(settingsIntent);
-                // hide secondary widgets
+            } else if (id == R.id.home_button) {
+                Intent homeIntent = new Intent(service, MainActivity.class);
+                homeIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+                service.startActivity(homeIntent);
                 hideSecondaryWidgets();
             } else if (id == R.id.stop_and_quit_button) {
                 // Stop video recording service

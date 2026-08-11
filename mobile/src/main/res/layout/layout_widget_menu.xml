@@ -12,30 +12,21 @@
         android:orientation="vertical">
 
         <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/view_recordings_button"
+            android:id="@+id/live_view_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/horizontal_widget_distance_large"
             android:background="@android:color/transparent"
-            android:src="@drawable/view_recordings_widget"/>
-
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/save_recording_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/horizontal_widget_distance"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
-            android:background="@android:color/transparent"
-            android:src="@drawable/save_recording_widget"/>
-
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/live_view_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/horizontal_widget_distance"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
-            android:background="@android:color/transparent"
             android:src="@drawable/ic_live"/>
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/home_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/horizontal_widget_distance_large"
+            android:layout_marginTop="@dimen/vertical_widget_distance"
+            android:background="@android:color/transparent"
+            android:src="@drawable/ic_home_widget"/>
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:layout_width="wrap_content"
@@ -46,15 +37,6 @@
             android:visibility="invisible"/>
 
         <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/settings_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/horizontal_widget_distance"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
-            android:background="@android:color/transparent"
-            android:src="@drawable/settings_widget"/>
-
-        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/stop_and_quit_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -62,5 +44,13 @@
             android:layout_marginTop="@dimen/vertical_widget_distance"
             android:background="@android:color/transparent"
             android:src="@drawable/quit_widget"/>
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/vertical_widget_distance"
+            android:background="@android:color/transparent"
+            android:src="@drawable/cam_widget"
+            android:visibility="invisible"/>
     </LinearLayout>
 </FrameLayout>
