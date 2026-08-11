@@ -180,9 +180,11 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       "display over other apps", (location for HUD/metadata).
       Note: ColorOS blocks adb `pm grant`/`appops`; permissions were granted manually via App Info.
 - [x] Home **REC button** starts recording (widget appears); tapping again / Stop ends it.
-- [ ] **"Add Start Recording to home screen"** creates a launcher shortcut that starts recording.
-- [ ] REC widget: **long-press + drag** moves it; tap opens the menu.
-- [ ] New clips are **silent** (no per-clip beep).
+- [x] **"Add Start Recording to home screen"** creates a launcher shortcut that starts recording.
+- [x] REC widget: **long-press + drag** moves it; tap opens the menu.
+- [x] New clips are **silent** (no per-clip beep).
+      Note: no beep API in code (no MediaActionSound/ToneGenerator); app force-mutes STREAM_SYSTEM
+      for the whole recording. Verified STREAM_SYSTEM muted during recording, no shutter/tone in logcat.
 - [~] **Recorded video shows burned-in date/time + GPS** at the bottom (CameraX OverlayEffect);
       verify text is upright and on-screen for your mount, and that clips chain every N minutes.
       Note: date/time verified burned-in, upright, advancing per frame. GPS showed "acquiring…"
@@ -191,11 +193,16 @@ Tested on OPPO Find X2 (CPH2023), Android 13 / API 33, ColorOS.
       is tappable and **persists**; storage slider + switches work; 1080p records at 1080p.
       Note: 1080p output verified via ffprobe; automation toggles verified persisting to prefs.
       Remaining segmented options not each exercised.
-- [ ] **Delete all recordings** button looks right and shows a confirmation dialog.
+- [x] **Delete all recordings** button looks right and shows a confirmation dialog.
 - [ ] After an hour rolls over, clips appear under `yyyy-MM-dd/HH` folders in View Recordings.
-- [ ] Recordings screen: count, total size, All/Starred tabs, delete-all, multi-select delete, empty state.
-- [ ] **Live view** (eye icon) updates every second; GPS/speed populate after granting location;
+- [x] Recordings screen: count, total size, All/Starred tabs, delete-all, multi-select delete, empty state.
+      Note: verified title count, header size, tab switching, long-press multi-select + confirm-dialog
+      delete, and empty-state clapperboard on both tabs.
+- [x] **Live view** (eye icon) updates every second; GPS/speed populate after granting location;
       temperature label changes; event log lists clip starts, foldering, warnings.
+      Note: verified 1s refresh (clock + REC timer advancing), GPS fix (12.90°, 77.71°), speed,
+      colored temperature, storage, and event log ("New clip…", "Recording started"). Fixed a
+      landscape bug where the event log was pushed off-screen — added layout-land variant (commit 8a6cedb).
 - [ ] Overheat alert fires above threshold; low-battery auto-shutdown works when enabled + unplugged.
 - [~] **Dark mode**: toggle system dark theme → all screens adapt.
 - [x] **Automation**: with toggles on, connecting the charger auto-starts and disconnecting auto-stops.
