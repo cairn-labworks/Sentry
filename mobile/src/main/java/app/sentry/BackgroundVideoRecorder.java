@@ -384,7 +384,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         Matrix sensorToBuffer = frame.getSensorToBufferTransform();
 
         // Recover the sensor-space bounds by inverse-mapping the buffer rectangle, so we can
-        // position the text along the bottom edge of the (upright) sensor image.
+        // position the text along the top edge of the (upright) sensor image.
         RectF sensorRect = new RectF(0, 0, frame.getSize().getWidth(), frame.getSize().getHeight());
         Matrix bufferToSensor = new Matrix();
         if (sensorToBuffer.invert(bufferToSensor)) {
@@ -406,13 +406,13 @@ public class BackgroundVideoRecorder extends LifecycleService {
         float lineGap = textSize * 0.35f;
         float stripHeight = textSize * 2 + lineGap + pad * 2;
 
-        // Background strip along the bottom of the upright sensor image
-        canvas.drawRect(sensorRect.left, sensorRect.bottom - stripHeight,
-                sensorRect.right, sensorRect.bottom, mBgPaint);
+        // Background strip along the top of the upright sensor image
+        canvas.drawRect(sensorRect.left, sensorRect.top,
+                sensorRect.right, sensorRect.top + stripHeight, mBgPaint);
 
         float x = sensorRect.left + pad;
-        float baseline2 = sensorRect.bottom - pad;
-        float baseline1 = baseline2 - textSize - lineGap;
+        float baseline1 = sensorRect.top + pad + textSize;
+        float baseline2 = baseline1 + textSize + lineGap;
         canvas.drawText(line1, x, baseline1, mTextPaint);
         canvas.drawText(line2, x, baseline2, mTextPaint);
     }
