@@ -65,6 +65,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         setupClipLength();
         setupResolution();
+        setupRecordingToggles();
         setupNightMode();
         setupStorage();
         setupSafety();
@@ -120,6 +121,18 @@ public class SettingsActivity extends AppCompatActivity {
         buildSegmented(findViewById(R.id.group_res), labels, values,
                 Util.getVideoResolution(),
                 value -> prefs.edit().putString("video_resolution", String.valueOf(value)).apply());
+    }
+
+    private void setupRecordingToggles() {
+        SwitchMaterial stabilization = findViewById(R.id.switch_stabilization);
+        stabilization.setChecked(Util.isVideoStabilizationEnabled());
+        stabilization.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_video_stabilization", checked).apply());
+
+        SwitchMaterial mountCheck = findViewById(R.id.switch_mount_check);
+        mountCheck.setChecked(Util.isMountCheckEnabled());
+        mountCheck.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_mount_check", checked).apply());
     }
 
     private void setupNightMode() {

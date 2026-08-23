@@ -136,6 +136,25 @@ public final class Util {
         return getIntPref("video_resolution", 1080);
     }
 
+    /**
+     * Whether electronic video stabilization (EIS) should be requested on the recording, for
+     * smoother footage on bumpy roads. Only takes effect when the camera advertises support;
+     * otherwise it silently no-ops. Defaults to on.
+     */
+    public static boolean isVideoStabilizationEnabled() {
+        return getPrefs().getBoolean("enable_video_stabilization", true);
+    }
+
+    /**
+     * Whether the experimental camera-placement (bonnet) mount check is enabled. When on, the
+     * app briefly analyses the video while driving and warns if the car bonnet does not appear
+     * to be visible along the bottom of the frame (a sign the camera is aimed too high). Runs
+     * fully on-device with no internet. Defaults to off (experimental / needs on-road tuning).
+     */
+    public static boolean isMountCheckEnabled() {
+        return getPrefs().getBoolean("enable_mount_check", false);
+    }
+
     // --- Theme (light/dark/system) ---
 
     public static final String THEME_SYSTEM = "system";

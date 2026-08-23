@@ -30,6 +30,7 @@ import androidx.annotation.Nullable;
 import androidx.arch.core.util.Function;
 import androidx.camera.core.CameraEffect;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.UseCaseGroup;
 import androidx.camera.effects.Frame;
 import androidx.camera.effects.OverlayEffect;
@@ -54,6 +55,8 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -88,8 +91,16 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private OverlayEffect mOverlayEffect;
     private androidx.camera.video.Recording mActiveRecording;
 
+    // Experimental offline camera-placement (bonnet) check.
+    private ImageAnalysis mImageAnalysis;
+    private BonnetMountChecker mBonnetChecker;
+    private ExecutorService mAnalysisExecutor;
+    private volatile boolean mMountWarned = false;
+
     // Tracks the currently-applied night-mode state so we only re-apply/log on transitions.
     private Boolean mNightAppliedState = null;
+    // Log the stabilization decision only once per recording session.
+    private boolean mStabilizationLogged = false;
 
     private HandlerThread mGlThread;
     private Handler mGlHandler;
@@ -222,15 +233,109 @@ public class BackgroundVideoRecorder extends LifecycleService {
             }
         });
 
-        UseCaseGroup group = new UseCaseGroup.Builder()
+        UseCaseGroup.Builder groupBuilder = new UseCaseGroup.Builder()
                 .addUseCase(mVideoCapture)
-                .addEffect(mOverlayEffect)
-                .build();
+                .addEffect(mOverlayEffect);
+
+        // Optional experimental placement check: attach a lightweight ImageAnalysis use case that
+        // feeds the bonnet-mount heuristic. It's additive and never required for recording, so if
+        // the device can't support this stream combination we fall back to recording without it.
+        boolean mountCheck = Util.isMountCheckEnabled();
+        if (mountCheck) {
+            setupMountCheck();
+            if (mImageAnalysis != null) {
+                groupBuilder.addUseCase(mImageAnalysis);
+            }
+        }
 
         mCameraProvider.unbindAll();
-        mCamera = mCameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group);
+        try {
+            mCamera = mCameraProvider.bindToLifecycle(
+                    this, CameraSelector.DEFAULT_BACK_CAMERA, groupBuilder.build());
+        } catch (Exception e) {
+            // Most likely an unsupported use-case/stream combination when the analysis use case is
+            // added. Retry with just recording + overlay so the dashcam keeps working.
+            Log.w(TAG, "Bind with ImageAnalysis failed; retrying without placement check", e);
+            teardownMountCheck();
+            mCameraProvider.unbindAll();
+            UseCaseGroup fallback = new UseCaseGroup.Builder()
+                    .addUseCase(mVideoCapture)
+                    .addEffect(mOverlayEffect)
+                    .build();
+            mCamera = mCameraProvider.bindToLifecycle(
+                    this, CameraSelector.DEFAULT_BACK_CAMERA, fallback);
+        }
         // Reset so the first segment always applies the current night-mode state.
         mNightAppliedState = null;
+        mStabilizationLogged = false;
+    }
+
+    // --- Experimental camera-placement (bonnet) check ---
+
+    private void setupMountCheck() {
+        try {
+            if (mAnalysisExecutor == null) {
+                mAnalysisExecutor = Executors.newSingleThreadExecutor();
+            }
+            mBonnetChecker = new BonnetMountChecker(this::onBonnetNotDetected);
+            mImageAnalysis = new ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                    .build();
+            mImageAnalysis.setAnalyzer(mAnalysisExecutor, image -> {
+                try {
+                    BonnetMountChecker checker = mBonnetChecker;
+                    if (checker != null && !checker.isDone()) {
+                        checker.analyze(image, mSpeedKmh);
+                        if (checker.isDone() && mImageAnalysis != null) {
+                            // Stop analysing once a verdict is reached, to save power.
+                            mImageAnalysis.clearAnalyzer();
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Bonnet analysis error", e);
+                } finally {
+                    image.close();
+                }
+            });
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to set up placement check", e);
+            mImageAnalysis = null;
+            mBonnetChecker = null;
+        }
+    }
+
+    private void teardownMountCheck() {
+        try {
+            if (mImageAnalysis != null) {
+                mImageAnalysis.clearAnalyzer();
+            }
+        } catch (Exception ignored) {
+        }
+        mImageAnalysis = null;
+        mBonnetChecker = null;
+    }
+
+    /** Invoked (off the main thread) when the heuristic concludes the bonnet isn't in frame. */
+    private void onBonnetNotDetected() {
+        if (mMountWarned) return;
+        mMountWarned = true;
+        Util.logEvent("Camera placement warning: bonnet not detected at bottom of frame");
+        try {
+            Util.showWarningNotification(this,
+                    "Check camera placement",
+                    "The car bonnet doesn't appear at the bottom of the video. Aim the camera a "
+                            + "little lower so the bonnet is visible in the bottom of the frame.");
+        } catch (Exception ignored) {
+        }
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                android.widget.Toast.makeText(getApplicationContext(),
+                        "Check dashcam placement: bonnet not visible at bottom",
+                        android.widget.Toast.LENGTH_LONG).show();
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     /**
@@ -280,6 +385,12 @@ public class BackgroundVideoRecorder extends LifecycleService {
                         android.hardware.camera2.CaptureRequest.CONTROL_MODE,
                         android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO);
             }
+
+            // Electronic video stabilization (EIS), applied in the same capture-request set so it
+            // persists alongside the night-mode options (setCaptureRequestOptions replaces the
+            // whole set). Gated on the camera advertising a supported stabilization mode.
+            applyVideoStabilization(camInfo, builder);
+
             control.setCaptureRequestOptions(builder.build());
 
             Log.i(TAG, "Night mode -> " + night + " (cameraSupportsNightScene=" + nightSupported + ")");
@@ -293,6 +404,50 @@ public class BackgroundVideoRecorder extends LifecycleService {
             mNightAppliedState = night;
         } catch (Exception e) {
             Log.e(TAG, "Failed to apply night mode", e);
+        }
+    }
+
+    /**
+     * Requests electronic video stabilization (EIS) on the given capture-request builder when the
+     * user setting is on and the camera advertises support. EIS smooths out road bumps at the cost
+     * of a slightly tighter field of view. Unsupported cameras are left untouched (no-op).
+     */
+    @SuppressLint("UnsafeOptInUsageError")
+    private void applyVideoStabilization(
+            androidx.camera.camera2.interop.Camera2CameraInfo camInfo,
+            androidx.camera.camera2.interop.CaptureRequestOptions.Builder builder) {
+        try {
+            boolean want = Util.isVideoStabilizationEnabled();
+            int[] modes = camInfo.getCameraCharacteristic(
+                    android.hardware.camera2.CameraCharacteristics
+                            .CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES);
+            boolean supported = false;
+            if (modes != null) {
+                for (int m : modes) {
+                    if (m == android.hardware.camera2.CameraMetadata
+                            .CONTROL_VIDEO_STABILIZATION_MODE_ON) {
+                        supported = true;
+                        break;
+                    }
+                }
+            }
+            int value = (want && supported)
+                    ? android.hardware.camera2.CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                    : android.hardware.camera2.CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF;
+            builder.setCaptureRequestOption(
+                    android.hardware.camera2.CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, value);
+
+            if (!mStabilizationLogged) {
+                Log.i(TAG, "Video stabilization -> " + (want && supported)
+                        + " (requested=" + want + ", cameraSupportsEIS=" + supported + ")");
+                Util.logEvent(want
+                        ? (supported ? "Video stabilization engaged"
+                                     : "Video stabilization requested (camera does not support EIS)")
+                        : "Video stabilization off");
+                mStabilizationLogged = true;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to apply video stabilization", e);
         }
     }
 
@@ -495,6 +650,12 @@ public class BackgroundVideoRecorder extends LifecycleService {
             } catch (Exception ignored) {
             }
             mOverlayEffect = null;
+        }
+
+        teardownMountCheck();
+        if (mAnalysisExecutor != null) {
+            mAnalysisExecutor.shutdown();
+            mAnalysisExecutor = null;
         }
 
         if (mGlThread != null) {
