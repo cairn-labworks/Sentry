@@ -115,7 +115,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private volatile Location mLastLocation = null;
 
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final LocationListener mLocationListener = new LocationListener() {
         @Override
@@ -517,9 +517,14 @@ public class BackgroundVideoRecorder extends LifecycleService {
     // --- Burned-in overlay ---
 
     private void setupOverlayPaints() {
+        // White fill with a soft shadow for a bit of extra separation from the scene.
         mTextPaint.setColor(Color.WHITE);
         mTextPaint.setShadowLayer(4f, 0f, 0f, Color.BLACK);
-        mBgPaint.setColor(Color.argb(120, 0, 0, 0));
+        // Black outline drawn behind the text so it stays legible over any background without
+        // needing a solid/semi-transparent bar.
+        mStrokePaint.setColor(Color.BLACK);
+        mStrokePaint.setStyle(Paint.Style.STROKE);
+        mStrokePaint.setStrokeJoin(Paint.Join.ROUND);
     }
 
     /**
@@ -556,18 +561,19 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
         float textSize = Math.max(24f, sensorRect.height() * 0.03f);
         mTextPaint.setTextSize(textSize);
+        mStrokePaint.setTextSize(textSize);
+        mStrokePaint.setStrokeWidth(Math.max(2f, textSize * 0.12f));
 
         float pad = textSize * 0.5f;
         float lineGap = textSize * 0.35f;
-        float stripHeight = textSize * 2 + lineGap + pad * 2;
-
-        // Background strip along the top of the upright sensor image
-        canvas.drawRect(sensorRect.left, sensorRect.top,
-                sensorRect.right, sensorRect.top + stripHeight, mBgPaint);
 
         float x = sensorRect.left + pad;
         float baseline1 = sensorRect.top + pad + textSize;
         float baseline2 = baseline1 + textSize + lineGap;
+        // Outline first, then white fill on top — text is burned directly into the frame with no
+        // background bar.
+        canvas.drawText(line1, x, baseline1, mStrokePaint);
+        canvas.drawText(line2, x, baseline2, mStrokePaint);
         canvas.drawText(line1, x, baseline1, mTextPaint);
         canvas.drawText(line2, x, baseline2, mTextPaint);
     }
