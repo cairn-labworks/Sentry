@@ -70,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
         setupStorage();
         setupSafety();
         setupGeneral();
+        setupExperimental();
         setupShortcut();
     }
 
@@ -128,7 +129,9 @@ public class SettingsActivity extends AppCompatActivity {
         stabilization.setChecked(Util.isVideoStabilizationEnabled());
         stabilization.setOnCheckedChangeListener((b, checked) ->
                 prefs.edit().putBoolean("enable_video_stabilization", checked).apply());
+    }
 
+    private void setupExperimental() {
         SwitchMaterial mountCheck = findViewById(R.id.switch_mount_check);
         mountCheck.setChecked(Util.isMountCheckEnabled());
         mountCheck.setOnCheckedChangeListener((b, checked) ->
