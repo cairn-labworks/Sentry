@@ -10,7 +10,7 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
-import android.graphics.RectF;
+import android.graphics.Rect;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -28,6 +28,8 @@ import android.os.PowerManager;
 import android.preference.PreferenceManager;
 import android.text.format.DateFormat;
 import android.util.Log;
+import android.view.OrientationEventListener;
+import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -35,6 +37,7 @@ import androidx.arch.core.util.Function;
 import androidx.camera.core.CameraEffect;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.Preview;
 import androidx.camera.core.UseCaseGroup;
 import androidx.camera.effects.Frame;
 import androidx.camera.effects.OverlayEffect;
@@ -95,6 +98,17 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private OverlayEffect mOverlayEffect;
     private androidx.camera.video.Recording mActiveRecording;
 
+    // Live preview: an always-bound Preview use case whose SurfaceProvider is attached only while
+    // the Live view screen is open (same process). Lets the user watch the ongoing recording.
+    private Preview mPreview;
+    private static volatile Preview.SurfaceProvider sPreviewSurfaceProvider;
+    private static volatile BackgroundVideoRecorder sInstance;
+
+    // Device physical orientation (Surface.ROTATION_*), tracked so recordings and the burned-in
+    // overlay stay upright whether the phone is mounted portrait or portrait-inverted (180).
+    private OrientationEventListener mOrientationListener;
+    private volatile int mTargetRotation = Surface.ROTATION_0;
+
     // Experimental offline camera-placement (bonnet) check.
     private ImageAnalysis mImageAnalysis;
     private BonnetMountChecker mBonnetChecker;
@@ -105,6 +119,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private Boolean mNightAppliedState = null;
     // Log the stabilization decision only once per recording session.
     private boolean mStabilizationLogged = false;
+    // Log the overlay rotation once per bind, for verification.
+    private boolean mOverlayRotationLogged = false;
 
     private HandlerThread mGlThread;
     private Handler mGlHandler;
@@ -188,6 +204,9 @@ public class BackgroundVideoRecorder extends LifecycleService {
         setupOverlayPaints();
         startLocationUpdates();
         startMotionDetection();
+        startOrientationTracking();
+
+        sInstance = this;
 
         mGlThread = new HandlerThread("overlay_gl_thread");
         mGlThread.start();
@@ -237,6 +256,15 @@ public class BackgroundVideoRecorder extends LifecycleService {
                 .setQualitySelector(qualitySelector)
                 .build();
         mVideoCapture = VideoCapture.withOutput(mRecorder);
+        // Record upright regardless of how the phone is mounted (portrait or portrait-inverted).
+        mVideoCapture.setTargetRotation(mTargetRotation);
+
+        // Live preview use case. Its SurfaceProvider is only attached while the Live view screen
+        // is open; when null, Preview simply renders nothing.
+        mPreview = new Preview.Builder()
+                .setTargetRotation(mTargetRotation)
+                .build();
+        mPreview.setSurfaceProvider(sPreviewSurfaceProvider);
 
         mOverlayEffect = new OverlayEffect(
                 CameraEffect.VIDEO_CAPTURE,
@@ -253,6 +281,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
         UseCaseGroup.Builder groupBuilder = new UseCaseGroup.Builder()
                 .addUseCase(mVideoCapture)
+                .addUseCase(mPreview)
                 .addEffect(mOverlayEffect);
 
         // Optional experimental placement check: attach a lightweight ImageAnalysis use case that
@@ -272,12 +301,13 @@ public class BackgroundVideoRecorder extends LifecycleService {
                     this, CameraSelector.DEFAULT_BACK_CAMERA, groupBuilder.build());
         } catch (Exception e) {
             // Most likely an unsupported use-case/stream combination when the analysis use case is
-            // added. Retry with just recording + overlay so the dashcam keeps working.
+            // added. Retry with just recording + preview + overlay so the dashcam keeps working.
             Log.w(TAG, "Bind with ImageAnalysis failed; retrying without placement check", e);
             teardownMountCheck();
             mCameraProvider.unbindAll();
             UseCaseGroup fallback = new UseCaseGroup.Builder()
                     .addUseCase(mVideoCapture)
+                    .addUseCase(mPreview)
                     .addEffect(mOverlayEffect)
                     .build();
             mCamera = mCameraProvider.bindToLifecycle(
@@ -286,6 +316,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         // Reset so the first segment always applies the current night-mode state.
         mNightAppliedState = null;
         mStabilizationLogged = false;
+        mOverlayRotationLogged = false;
     }
 
     // --- Experimental camera-placement (bonnet) check ---
@@ -478,6 +509,13 @@ public class BackgroundVideoRecorder extends LifecycleService {
         // Re-evaluate the night-mode schedule at each segment boundary.
         applyNightMode();
 
+        // Lock in the current device orientation for this clip so it records upright. Updating only
+        // at segment boundaries keeps the burned-in overlay (which reads the frame rotation) in sync
+        // with the recorded video for the whole clip.
+        if (mVideoCapture != null) {
+            mVideoCapture.setTargetRotation(mTargetRotation);
+        }
+
         // Housekeeping before each segment
         rotateRecordings(BackgroundVideoRecorder.this, Util.getQuota());
         organizeRecordings();
@@ -547,38 +585,55 @@ public class BackgroundVideoRecorder extends LifecycleService {
     }
 
     /**
-     * Draws the timestamp and GPS location onto the frame.
+     * Draws the timestamp and GPS location onto the frame, always upright and anchored to the
+     * visual top-left of the final (upright) video.
      *
-     * The overlay must be drawn in the camera **sensor coordinate system** and mapped to the
-     * output buffer with {@link Frame#getSensorToBufferTransform()}. That transform (plus the
-     * video's rotation metadata) is what keeps both the scene and the overlay upright in the final
-     * video, regardless of device/mount orientation. (Manually rotating the canvas double-applies
-     * the rotation and makes the text upside-down.)
+     * <p>The overlay is drawn in <b>buffer coordinates</b> (the canvas is backed by a surface of
+     * {@link Frame#getSize()}), because {@link Frame#getCropRect()} and
+     * {@link Frame#getRotationDegrees()} are expressed there. The pipeline crops to the crop rect
+     * and then rotates clockwise by {@code rotationDegrees} to produce the upright output. We move
+     * the origin to whichever buffer corner becomes the visual top-left after that rotation and
+     * pre-rotate the canvas by {@code -rotationDegrees}, so both the text position and its glyphs
+     * come out correct whether the phone is mounted portrait or portrait-inverted.
      */
     private void drawOverlay(Frame frame) {
         Canvas canvas = frame.getOverlayCanvas();
         // Clear the whole canvas first (CLEAR ignores the current matrix)
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+        // Work in buffer coordinates.
+        canvas.setMatrix(new Matrix());
 
-        Matrix sensorToBuffer = frame.getSensorToBufferTransform();
+        Rect crop = frame.getCropRect();
+        int rot = ((frame.getRotationDegrees() % 360) + 360) % 360;
 
-        // Recover the sensor-space bounds by inverse-mapping the buffer rectangle, so we can
-        // position the text along the top edge of the (upright) sensor image.
-        RectF sensorRect = new RectF(0, 0, frame.getSize().getWidth(), frame.getSize().getHeight());
-        Matrix bufferToSensor = new Matrix();
-        if (sensorToBuffer.invert(bufferToSensor)) {
-            bufferToSensor.mapRect(sensorRect);
+        if (!mOverlayRotationLogged) {
+            Log.i(TAG, "Overlay rotationDegrees=" + rot + " crop=" + crop
+                    + " targetRotation=" + mTargetRotation);
+            mOverlayRotationLogged = true;
         }
 
-        // Draw in sensor coordinates
-        canvas.setMatrix(sensorToBuffer);
+        // Buffer corner that becomes the visual top-left after the pipeline rotates CW by `rot`.
+        float originX, originY;
+        switch (rot) {
+            case 90:  originX = crop.left;  originY = crop.bottom; break;
+            case 180: originX = crop.right; originY = crop.bottom; break;
+            case 270: originX = crop.right; originY = crop.top;    break;
+            default:  originX = crop.left;  originY = crop.top;    break; // 0
+        }
+        canvas.translate(originX, originY);
+        canvas.rotate(-rot);
+
+        // Upright output dimensions (width/height swap for 90/270).
+        boolean swap = (rot == 90 || rot == 270);
+        float outW = swap ? crop.height() : crop.width();
+        float outH = swap ? crop.width() : crop.height();
 
         String line1 = DateFormat.format("yyyy-MM-dd  HH:mm:ss", new Date()).toString();
         String line2 = mHasLocation
                 ? String.format(Locale.US, "%.5f, %.5f   %.0f km/h", mLat, mLng, mSpeedKmh)
                 : "GPS: acquiring\u2026";
 
-        float textSize = Math.max(24f, sensorRect.height() * 0.03f);
+        float textSize = Math.max(24f, outH * 0.03f);
         mTextPaint.setTextSize(textSize);
         mStrokePaint.setTextSize(textSize);
         mStrokePaint.setStrokeWidth(Math.max(2f, textSize * 0.12f));
@@ -586,8 +641,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
         float pad = textSize * 0.5f;
         float lineGap = textSize * 0.35f;
 
-        float x = sensorRect.left + pad;
-        float baseline1 = sensorRect.top + pad + textSize;
+        float x = pad;
+        float baseline1 = pad + textSize;
         float baseline2 = baseline1 + textSize + lineGap;
         // Outline first, then white fill on top — text is burned directly into the frame with no
         // background bar.
@@ -642,6 +697,85 @@ public class BackgroundVideoRecorder extends LifecycleService {
         try {
             if (mLocationManager != null) mLocationManager.removeUpdates(mLocationListener);
         } catch (Exception ignored) {
+        }
+    }
+
+    // --- Device orientation (keeps video + overlay upright) ---
+
+    /**
+     * Tracks the phone's physical orientation via the accelerometer/gyroscope and maps it to a
+     * {@link Surface} rotation. Applied to the {@link VideoCapture} (and Preview) so recordings and
+     * the burned-in overlay stay upright whether the phone is mounted portrait or portrait-inverted.
+     */
+    private void startOrientationTracking() {
+        try {
+            mOrientationListener = new OrientationEventListener(this) {
+                @Override
+                public void onOrientationChanged(int orientation) {
+                    if (orientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
+                        return;
+                    }
+                    int rotation;
+                    if (orientation >= 45 && orientation < 135) {
+                        rotation = Surface.ROTATION_270;
+                    } else if (orientation >= 135 && orientation < 225) {
+                        rotation = Surface.ROTATION_180;
+                    } else if (orientation >= 225 && orientation < 315) {
+                        rotation = Surface.ROTATION_90;
+                    } else {
+                        rotation = Surface.ROTATION_0;
+                    }
+                    mTargetRotation = rotation;
+                }
+            };
+            if (mOrientationListener.canDetectOrientation()) {
+                mOrientationListener.enable();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start orientation tracking", e);
+        }
+    }
+
+    private void stopOrientationTracking() {
+        try {
+            if (mOrientationListener != null) mOrientationListener.disable();
+        } catch (Exception ignored) {
+        }
+    }
+
+    // --- Live preview attach/detach (called by LiveViewActivity, same process) ---
+
+    /**
+     * Attaches a preview surface so the Live view screen can show the ongoing recording. Safe to
+     * call whether or not the recorder is currently running; the provider is remembered and applied
+     * on the next bind.
+     */
+    static void attachPreview(Preview.SurfaceProvider provider) {
+        sPreviewSurfaceProvider = provider;
+        final BackgroundVideoRecorder inst = sInstance;
+        if (inst != null) {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    if (inst.mPreview != null) inst.mPreview.setSurfaceProvider(provider);
+                } catch (Exception e) {
+                    Log.w(TAG, "attachPreview failed", e);
+                }
+            });
+        }
+    }
+
+    /** Detaches the preview surface when the Live view screen closes. */
+    static void detachPreview() {
+        sPreviewSurfaceProvider = null;
+        final BackgroundVideoRecorder inst = sInstance;
+        if (inst != null) {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    if (inst.mPreview != null) inst.mPreview.setSurfaceProvider(null);
+                } catch (Exception e) {
+                    Log.w(TAG, "detachPreview failed", e);
+                }
+            });
         }
     }
 
@@ -767,6 +901,10 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
         stopLocationUpdates();
         stopMotionDetection();
+        stopOrientationTracking();
+        if (sInstance == this) {
+            sInstance = null;
+        }
 
         try {
             if (mActiveRecording != null) {

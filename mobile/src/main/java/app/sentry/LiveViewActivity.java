@@ -19,6 +19,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -42,6 +43,8 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     private LocationManager mLocationManager;
 
     private TextView mClock, mDate, mBattery, mSpeed, mTemp, mResFps, mStorage, mGps, mRecStatus, mEventLog;
+    private PreviewView mPreview;
+    private TextView mPreviewHint;
 
     private final SimpleDateFormat mClockFmt = new SimpleDateFormat("HH:mm:ss", Locale.US);
     private final SimpleDateFormat mDateFmt = new SimpleDateFormat("EEE, d MMM yyyy", Locale.US);
@@ -70,6 +73,8 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         mGps = findViewById(R.id.txt_gps);
         mRecStatus = findViewById(R.id.txt_recstatus);
         mEventLog = findViewById(R.id.txt_eventlog);
+        mPreview = findViewById(R.id.preview);
+        mPreviewHint = findViewById(R.id.txt_preview_hint);
 
         findViewById(R.id.btn_close).setOnClickListener(v -> finish());
 
@@ -81,12 +86,19 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         super.onResume();
         mHandler.post(mTick);
         startLocationIfPermitted();
+        // Feed the ongoing recording's camera into our PreviewView (same process as the recorder).
+        if (mPreview != null) {
+            BackgroundVideoRecorder.attachPreview(mPreview.getSurfaceProvider());
+        }
     }
 
     @Override
     protected void onPause() {
         mHandler.removeCallbacks(mTick);
         stopLocation();
+        if (mPreview != null) {
+            BackgroundVideoRecorder.detachPreview();
+        }
         super.onPause();
     }
 
@@ -154,6 +166,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     private void refreshRecStatus(long now) {
         if (BackgroundVideoRecorder.isRecording) {
+            if (mPreviewHint != null) mPreviewHint.setVisibility(android.view.View.GONE);
             long elapsedMs = Math.max(0, now - BackgroundVideoRecorder.recordingStartedAt);
             long h = TimeUnit.MILLISECONDS.toHours(elapsedMs);
             long m = TimeUnit.MILLISECONDS.toMinutes(elapsedMs) % 60;
@@ -166,6 +179,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
             mRecStatus.setText(String.format(Locale.US, "\u25CF REC   %02d:%02d:%02d%s", h, m, s, clipName));
             mRecStatus.setTextColor(0xFFFF5252);
         } else {
+            if (mPreviewHint != null) mPreviewHint.setVisibility(android.view.View.VISIBLE);
             mRecStatus.setText("Not recording");
             mRecStatus.setTextColor(0xFF90A4AE);
         }

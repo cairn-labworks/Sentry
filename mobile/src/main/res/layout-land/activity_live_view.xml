@@ -54,12 +54,35 @@
         android:textColor="#FFB0BEC5"
         android:textSize="13sp" />
 
-    <!-- Body: telemetry (left) + event log (right) -->
+    <!-- Body: preview (left) + telemetry + event log -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="horizontal">
+
+        <!-- Live camera feed of the ongoing recording -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2"
+            android:layout_marginEnd="12dp"
+            android:background="#FF000000">
+
+            <androidx.camera.view.PreviewView
+                android:id="@+id/preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/txt_preview_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Live preview available while recording"
+                android:textColor="#FF90A4AE"
+                android:textSize="13sp" />
+        </FrameLayout>
 
         <!-- Left column: telemetry -->
         <ScrollView
