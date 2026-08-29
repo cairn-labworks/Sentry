@@ -11,6 +11,10 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.RectF;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -114,6 +118,19 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private volatile float mSpeedKmh = 0;
     private volatile Location mLastLocation = null;
 
+    // Auto-pause when parked (offline motion detection via the accelerometer + GPS speed).
+    private SensorManager mSensorManager;
+    private Sensor mAccelerometer;
+    private volatile long mLastMotionAt = 0;
+    private volatile boolean mAutoPaused = false;
+    private float mAccelEma = 0f;
+    private boolean mAccelEmaInit = false;
+    // Motion is detected when accelerometer jitter exceeds this (m/s^2) or GPS speed exceeds
+    // SPEED_MOTION_KMH. Engine vibration/driving comfortably exceed these; a truly parked (engine
+    // off) phone sits well below.
+    private static final float ACCEL_MOTION_THRESHOLD = 0.30f;
+    private static final float SPEED_MOTION_KMH = 3f;
+
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -170,6 +187,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         disableSound(editor);
         setupOverlayPaints();
         startLocationUpdates();
+        startMotionDetection();
 
         mGlThread = new HandlerThread("overlay_gl_thread");
         mGlThread.start();
@@ -455,7 +473,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
     @SuppressLint("MissingPermission")
     private void startNextSegment() {
-        if (mStopping || mRecorder == null) return;
+        if (mStopping || mRecorder == null || mAutoPaused) return;
 
         // Re-evaluate the night-mode schedule at each segment boundary.
         applyNightMode();
@@ -509,7 +527,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
         // A duration-limit finalize still produces a valid file
         Util.insertNewRecording(new app.sentry.models.Recording(currentVideoFile));
 
-        if (!mStopping) {
+        // Don't chain the next clip while stopping or while auto-paused (parked).
+        if (!mStopping && !mAutoPaused) {
             startNextSegment();
         }
     }
@@ -626,6 +645,118 @@ public class BackgroundVideoRecorder extends LifecycleService {
         }
     }
 
+    // --- Auto-pause when parked (offline motion detection) ---
+
+    /**
+     * Registers a low-rate accelerometer listener used, together with GPS speed, to detect whether
+     * the vehicle is moving. Runs whenever recording is active; it only acts on the "stationary"
+     * signal when the user setting is enabled, but always resumes a previously auto-paused session
+     * as soon as motion returns. Fully offline (no network).
+     */
+    private void startMotionDetection() {
+        try {
+            mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+            if (mSensorManager == null) return;
+            mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (mAccelerometer == null) {
+                Log.w(TAG, "No accelerometer; auto-pause disabled");
+                return;
+            }
+            mLastMotionAt = System.currentTimeMillis();
+            mSensorManager.registerListener(mMotionListener, mAccelerometer,
+                    SensorManager.SENSOR_DELAY_NORMAL, new Handler(Looper.getMainLooper()));
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start motion detection", e);
+        }
+    }
+
+    private void stopMotionDetection() {
+        try {
+            if (mSensorManager != null) mSensorManager.unregisterListener(mMotionListener);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private final SensorEventListener mMotionListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (mStopping) return;
+
+            float x = event.values[0];
+            float y = event.values[1];
+            float z = event.values[2];
+            double magnitude = Math.sqrt(x * x + y * y + z * z);
+
+            if (!mAccelEmaInit) {
+                mAccelEma = (float) magnitude;
+                mAccelEmaInit = true;
+                return;
+            }
+            float jitter = Math.abs((float) magnitude - mAccelEma);
+            // Exponential moving average tracks the (gravity) baseline so we measure deviation.
+            mAccelEma += 0.2f * ((float) magnitude - mAccelEma);
+
+            boolean moving = jitter > ACCEL_MOTION_THRESHOLD || mSpeedKmh > SPEED_MOTION_KMH;
+            long now = System.currentTimeMillis();
+
+            // If the feature was turned off while we were paused, resume so we don't get stuck.
+            if (mAutoPaused && !Util.isAutoPauseStationaryEnabled()) {
+                resumeFromStationary();
+                return;
+            }
+
+            if (moving) {
+                mLastMotionAt = now;
+                if (mAutoPaused) {
+                    resumeFromStationary();
+                }
+                return;
+            }
+
+            // Stationary: pause after the configured timeout, if enabled and currently recording.
+            if (!mAutoPaused && Util.isAutoPauseStationaryEnabled()) {
+                long timeoutMs = Util.getStationaryTimeoutMinutes() * 60_000L;
+                if (now - mLastMotionAt >= timeoutMs) {
+                    pauseForStationary();
+                }
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
+
+    /** Stops writing clips (camera stays bound) because the vehicle has been parked. */
+    private void pauseForStationary() {
+        if (mAutoPaused || mStopping) return;
+        mAutoPaused = true;
+        Log.i(TAG, "Auto-pause: stationary for " + Util.getStationaryTimeoutMinutes() + " min");
+        Util.logEvent("Auto-pause: stationary for "
+                + Util.getStationaryTimeoutMinutes() + " min");
+        try {
+            if (mActiveRecording != null) {
+                // Finalize the in-progress clip; onSegmentFinalized won't chain while paused.
+                mActiveRecording.stop();
+                mActiveRecording = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error pausing recording", e);
+        }
+    }
+
+    /** Resumes clip recording once motion is detected again. */
+    private void resumeFromStationary() {
+        if (!mAutoPaused) return;
+        mAutoPaused = false;
+        mLastMotionAt = System.currentTimeMillis();
+        Log.i(TAG, "Auto-resume: motion detected");
+        Util.logEvent("Auto-resume: motion detected");
+        if (!mStopping && mActiveRecording == null) {
+            startNextSegment();
+        }
+    }
+
     // --- Teardown ---
 
     @Override
@@ -635,6 +766,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         Util.logEvent("Recording stopped");
 
         stopLocationUpdates();
+        stopMotionDetection();
 
         try {
             if (mActiveRecording != null) {

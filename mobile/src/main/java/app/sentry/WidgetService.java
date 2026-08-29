@@ -31,6 +31,12 @@ public class WidgetService extends Service {
     private boolean mPluggedStateKnown = false;
     private boolean mWasPluggedIn = false;
 
+    // Overcharge protection: tracks whether we've already acted at/above the limit, so we alert
+    // (and pause charging where supported) once per crossing and re-arm only after the level drops
+    // back to the resume threshold.
+    private boolean mChargeLimitReached = false;
+    private long mLastOverchargeWarnMs = 0;
+
     /**
      * Monitors battery temperature and level to protect battery health:
      * warns on overheating and can safely shut the app down on low battery.
@@ -95,8 +101,45 @@ public class WidgetService extends Service {
                     safeShutdown(getString(R.string.low_battery_shutdown_message, percent));
                 }
             }
+
+            // Overcharge protection
+            if (Util.isOverchargeProtectionEnabled() && level >= 0 && scale > 0) {
+                int percent = Math.round(level * 100f / scale);
+                handleOverchargeProtection(percent, charging);
+            }
         }
     };
+
+    /**
+     * Warns the user (and, on rooted/vendor-supported devices only, pauses charging) once the
+     * battery reaches the configured limit while charging, then re-arms after the level falls back
+     * to the resume threshold (limit - 10). On unsupported devices this is a notify-only reminder,
+     * since stock Android has no public API to stop charging.
+     */
+    private void handleOverchargeProtection(int percent, boolean charging) {
+        int limit = Util.getOverchargeLimit();
+        int resume = Util.getOverchargeResumeThreshold();
+
+        if (!mChargeLimitReached && charging && percent >= limit) {
+            mChargeLimitReached = true;
+            boolean stopped = ChargeController.setCharging(false);
+            long now = System.currentTimeMillis();
+            if (now - mLastOverchargeWarnMs >= OVERHEAT_WARN_INTERVAL_MS) {
+                mLastOverchargeWarnMs = now;
+                String text = stopped
+                        ? "Battery reached " + percent + "%. Charging paused to protect battery health."
+                        : "Battery reached " + percent + "%. Unplug the charger to protect battery health.";
+                Util.showWarningNotification(getApplicationContext(),
+                        "Overcharge protection", text);
+                Util.showToastLong(getApplicationContext(), text);
+            }
+            Util.logEvent("Overcharge limit reached at " + percent + "% (hardwarePause=" + stopped + ")");
+        } else if (mChargeLimitReached && percent <= resume) {
+            mChargeLimitReached = false;
+            boolean resumed = ChargeController.setCharging(true);
+            Util.logEvent("Overcharge re-armed at " + percent + "% (hardwareResume=" + resumed + ")");
+        }
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -160,6 +203,12 @@ public class WidgetService extends Service {
             unregisterReceiver(mBatteryReceiver);
         } catch (Exception ignored) {
             // Receiver may not be registered
+        }
+
+        // Safety: never leave charging paused after we stop. If overcharge protection had paused
+        // charging on a supported device, re-enable it now.
+        if (mChargeLimitReached) {
+            ChargeController.setCharging(true);
         }
 
         // Remove rootView views from display

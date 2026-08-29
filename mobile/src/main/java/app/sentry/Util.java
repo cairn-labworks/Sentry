@@ -54,6 +54,8 @@ public final class Util {
     private static final int DEFAULT_CLIP_DURATION_SEC = 300;
     private static final int DEFAULT_OVERHEAT_THRESHOLD_C = 45;
     private static final int DEFAULT_LOW_BATTERY_THRESHOLD_PCT = 15;
+    private static final int DEFAULT_OVERCHARGE_LIMIT_PCT = 80;
+    private static final int DEFAULT_STATIONARY_TIMEOUT_MIN = 20;
 
     private static SharedPreferences getPrefs() {
         return PreferenceManager.getDefaultSharedPreferences(SentryApp.getAppContext());
@@ -127,6 +129,49 @@ public final class Util {
      */
     public static int getLowBatteryThreshold() {
         return getIntPref("low_battery_threshold_pct", DEFAULT_LOW_BATTERY_THRESHOLD_PCT);
+    }
+
+    /**
+     * Whether overcharge protection is enabled. When on, the app warns the user to unplug once
+     * the battery reaches {@link #getOverchargeLimit()} while charging, and (on rooted/vendor-
+     * supported devices only) attempts to actually pause charging. Charging is considered fine
+     * again once the level falls to {@link #getOverchargeResumeThreshold()}. Defaults to off.
+     */
+    public static boolean isOverchargeProtectionEnabled() {
+        return getPrefs().getBoolean("enable_overcharge_protection", false);
+    }
+
+    /**
+     * Battery level (percent) at or above which charging should be stopped/warned. Default 80.
+     */
+    public static int getOverchargeLimit() {
+        return getIntPref("overcharge_limit_pct", DEFAULT_OVERCHARGE_LIMIT_PCT);
+    }
+
+    /**
+     * Battery level (percent) at or below which charging may resume: 10 points under the limit,
+     * per the desired hysteresis (e.g. limit 80 -> resume at 70). Floored at 0.
+     */
+    public static int getOverchargeResumeThreshold() {
+        return Math.max(0, getOverchargeLimit() - 10);
+    }
+
+    /**
+     * Whether the recorder should automatically pause when the vehicle is detected (via the
+     * phone's motion sensors, fully offline) to be stationary for {@link
+     * #getStationaryTimeoutMinutes()} minutes, and resume when motion is detected again.
+     * Defaults to off.
+     */
+    public static boolean isAutoPauseStationaryEnabled() {
+        return getPrefs().getBoolean("enable_auto_pause_stationary", false);
+    }
+
+    /**
+     * How long (minutes) the vehicle must be continuously stationary before recording auto-pauses.
+     * Default 20.
+     */
+    public static int getStationaryTimeoutMinutes() {
+        return getIntPref("stationary_timeout_min", DEFAULT_STATIONARY_TIMEOUT_MIN);
     }
 
     /**

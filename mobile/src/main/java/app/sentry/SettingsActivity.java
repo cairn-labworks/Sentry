@@ -279,6 +279,17 @@ public class SettingsActivity extends AppCompatActivity {
                 new int[]{5, 10, 15, 20, 25},
                 Util.getLowBatteryThreshold(),
                 value -> prefs.edit().putString("low_battery_threshold_pct", String.valueOf(value)).apply());
+
+        SwitchMaterial overcharge = findViewById(R.id.switch_overcharge);
+        overcharge.setChecked(Util.isOverchargeProtectionEnabled());
+        overcharge.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_overcharge_protection", checked).apply());
+
+        buildSegmented(findViewById(R.id.group_overcharge),
+                new String[]{"70%", "80%", "85%", "90%"},
+                new int[]{70, 80, 85, 90},
+                Util.getOverchargeLimit(),
+                value -> prefs.edit().putString("overcharge_limit_pct", String.valueOf(value)).apply());
     }
 
     private void setupGeneral() {
@@ -291,6 +302,17 @@ public class SettingsActivity extends AppCompatActivity {
         autostop.setChecked(prefs.getBoolean("auto_stop_on_discharge", false));
         autostop.setOnCheckedChangeListener((b, checked) ->
                 prefs.edit().putBoolean("auto_stop_on_discharge", checked).apply());
+
+        SwitchMaterial autopause = findViewById(R.id.switch_autopause);
+        autopause.setChecked(Util.isAutoPauseStationaryEnabled());
+        autopause.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_auto_pause_stationary", checked).apply());
+
+        buildSegmented(findViewById(R.id.group_autopause),
+                new String[]{"10 min", "20 min", "30 min", "45 min"},
+                new int[]{10, 20, 30, 45},
+                Util.getStationaryTimeoutMinutes(),
+                value -> prefs.edit().putString("stationary_timeout_min", String.valueOf(value)).apply());
 
         SwitchMaterial silent = findViewById(R.id.switch_silent);
         silent.setChecked(prefs.getBoolean("disable_sound", true));
