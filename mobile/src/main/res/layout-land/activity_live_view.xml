@@ -40,7 +40,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingLeft="24dp"
-        android:paddingTop="14dp"
+        android:paddingTop="4dp"
         android:paddingRight="72dp"
         android:paddingBottom="14dp">
 
@@ -71,10 +71,10 @@
 
             <TextView
                 style="@style/HudLabel"
-                android:text="RESOLUTION" />
+                android:text="DATE / TIME" />
 
             <TextView
-                android:id="@+id/txt_resfps"
+                android:id="@+id/txt_datetime"
                 style="@style/HudValueLarge"
                 android:text="--" />
         </LinearLayout>

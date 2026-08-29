@@ -22,6 +22,8 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Locale;
 
 /**
@@ -36,7 +38,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private LocationManager mLocationManager;
 
-    private TextView mSpeed, mTemp, mResFps;
+    private TextView mSpeed, mTemp, mDateTime;
     private PreviewView mPreview;
     private TextView mPreviewHint;
     private View mRecDot;
@@ -59,7 +61,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
         mSpeed = findViewById(R.id.txt_speed);
         mTemp = findViewById(R.id.txt_temp);
-        mResFps = findViewById(R.id.txt_resfps);
+        mDateTime = findViewById(R.id.txt_datetime);
         mPreview = findViewById(R.id.preview);
         mPreviewHint = findViewById(R.id.txt_preview_hint);
         mRecDot = findViewById(R.id.rec_dot);
@@ -131,7 +133,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     private void refresh() {
         refreshTemp();
-        refreshResFps();
+        refreshDateTime();
         refreshRecIndicator();
         applyPreviewOrientation();
     }
@@ -160,10 +162,11 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         }
     }
 
-    private void refreshResFps() {
-        int res = Util.getVideoResolution();
-        String label = (res >= 2160) ? "4K" : (res + "P");
-        mResFps.setText(label + " \u00B7 30 FPS");
+    private final SimpleDateFormat mDateTimeFmt =
+            new SimpleDateFormat("dd MMM \u00B7 HH:mm:ss", Locale.getDefault());
+
+    private void refreshDateTime() {
+        mDateTime.setText(mDateTimeFmt.format(new Date()));
     }
 
     private void refreshRecIndicator() {
