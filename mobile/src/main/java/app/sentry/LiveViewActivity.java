@@ -101,43 +101,20 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     }
 
     /**
-     * Keeps the live feed upright by rotating the PreviewView based on the phone's current physical
-     * orientation (tracked live by the recorder's sensors) relative to this screen's display
-     * rotation. Re-evaluated each tick so it follows the device as it turns, and works for either
-     * landscape mount direction. The shared Preview is bound headless at ROTATION_0, so a constant
-     * 90 degree offset accounts for the camera sensor orientation (calibrated on-device).
+     * Keeps the live feed upright by telling the shared Preview use case which screen orientation it
+     * is being displayed on. CameraX + PreviewView then apply the correct transform (accounting for
+     * the camera sensor mounting) automatically. Re-evaluated each tick so it follows the display if
+     * the activity is re-laid out. No manual view rotation is used.
      */
     private void applyPreviewOrientation() {
         if (mPreview == null) return;
-        View parent = (View) mPreview.getParent();
-        if (parent == null) return;
-        int cw = parent.getWidth();
-        int ch = parent.getHeight();
-        if (cw == 0 || ch == 0) return;
-
-        int deviceRotDeg = BackgroundVideoRecorder.getDeviceRotation() * 90;
-        int dispRotDeg = (mPreview.getDisplay() != null
+        int dispRotation = (mPreview.getDisplay() != null
                 ? mPreview.getDisplay().getRotation()
-                : getWindowManager().getDefaultDisplay().getRotation()) * 90;
-        float degrees = ((deviceRotDeg - dispRotDeg + 90) % 360 + 360) % 360;
-
-        if (degrees == mAppliedPreviewRotation && mPreview.getWidth() == cw
-                && mPreview.getHeight() == ch) {
-            return; // No change; avoid re-laying out every tick.
+                : getWindowManager().getDefaultDisplay().getRotation());
+        if (dispRotation != mAppliedPreviewRotation) {
+            mAppliedPreviewRotation = dispRotation;
+            BackgroundVideoRecorder.setPreviewTargetRotation(dispRotation);
         }
-        mAppliedPreviewRotation = degrees;
-
-        boolean quarter = (Math.round(degrees / 90f) % 2) != 0;
-        mPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
-        android.view.ViewGroup.LayoutParams lp = mPreview.getLayoutParams();
-        lp.width = cw;
-        lp.height = ch;
-        mPreview.setLayoutParams(lp);
-        // Scale up so the rotated frame still fills the screen (no letterboxing).
-        float scale = quarter ? (float) Math.max(cw, ch) / Math.min(cw, ch) : 1f;
-        mPreview.setScaleX(scale);
-        mPreview.setScaleY(scale);
-        mPreview.setRotation(degrees);
     }
 
     @Override

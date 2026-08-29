@@ -260,11 +260,9 @@ public class BackgroundVideoRecorder extends LifecycleService {
         mVideoCapture.setTargetRotation(mTargetRotation);
 
         // Live preview use case. Its SurfaceProvider is only attached while the Live view screen
-        // is open; when null, Preview simply renders nothing. Built with a fixed ROTATION_0 so the
-        // buffer orientation is constant; LiveViewActivity corrects orientation at the view level.
-        mPreview = new Preview.Builder()
-                .setTargetRotation(Surface.ROTATION_0)
-                .build();
+        // is open; when null, Preview simply renders nothing. The target rotation is updated live by
+        // LiveViewActivity to match the screen showing the preview, so PreviewView renders upright.
+        mPreview = new Preview.Builder().build();
         mPreview.setSurfaceProvider(sPreviewSurfaceProvider);
 
         mOverlayEffect = new OverlayEffect(
@@ -768,12 +766,19 @@ public class BackgroundVideoRecorder extends LifecycleService {
     }
 
     /**
-     * Live device orientation as a {@link Surface} rotation, tracked continuously by the
-     * OrientationEventListener. Used by the Live view to keep the preview upright as the phone moves.
+     * Updates the live preview's target rotation to match the screen currently showing it, so
+     * CameraX/PreviewView renders the feed upright. Called by LiveViewActivity while it is open.
      */
-    static int getDeviceRotation() {
+    static void setPreviewTargetRotation(int rotation) {
         final BackgroundVideoRecorder inst = sInstance;
-        return inst != null ? inst.mTargetRotation : Surface.ROTATION_0;
+        if (inst == null || inst.mPreview == null) return;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                inst.mPreview.setTargetRotation(rotation);
+            } catch (Exception e) {
+                Log.w(TAG, "setPreviewTargetRotation failed", e);
+            }
+        });
     }
 
     /** Detaches the preview surface when the Live view screen closes. */
