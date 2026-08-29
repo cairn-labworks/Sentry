@@ -94,8 +94,10 @@ public class WidgetService extends Service {
                 }
             }
 
-            // Low-battery safe shutdown (only when not charging)
-            if (Util.isLowBatteryShutdownEnabled() && !charging && level >= 0 && scale > 0) {
+            // Low-battery safe shutdown (only when not charging). Also triggered by Parking Mode,
+            // which keeps recording while parked until the battery reaches this same threshold.
+            boolean lowBattStopEnabled = Util.isLowBatteryShutdownEnabled() || Util.isParkingModeEnabled();
+            if (lowBattStopEnabled && !charging && level >= 0 && scale > 0) {
                 int percent = Math.round(level * 100f / scale);
                 if (percent <= Util.getLowBatteryThreshold()) {
                     safeShutdown(getString(R.string.low_battery_shutdown_message, percent));

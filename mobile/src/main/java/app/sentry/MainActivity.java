@@ -45,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean mPendingStart = false;
 
     private TextView mStorageText, mStoragePercent, mRecSubtitle, mRecTimer;
+    private TextView mParkingState;
     private ImageView mRecIcon;
 
     private final Handler mTimerHandler = new Handler(Looper.getMainLooper());
@@ -136,6 +137,37 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(this, SettingsActivity.class)));
         findViewById(R.id.card_recordings).setOnClickListener(v ->
                 startActivity(new Intent(this, ViewRecordingsActivity.class)));
+
+        mParkingState = findViewById(R.id.txt_parking_state);
+        findViewById(R.id.card_live).setOnClickListener(v -> openLiveView());
+        findViewById(R.id.card_parking).setOnClickListener(v -> toggleParkingMode());
+        updateParkingUi();
+    }
+
+    /** Opens the live camera view. If not recording, prompts the user to start first. */
+    private void openLiveView() {
+        if (!Util.isRecording()) {
+            Toast.makeText(this, "Start recording to see the live view", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        startActivity(new Intent(this, LiveViewActivity.class));
+    }
+
+    /** Toggles Parking Mode and reflects the new state in the card. */
+    private void toggleParkingMode() {
+        boolean enabled = !Util.isParkingModeEnabled();
+        Util.setParkingMode(enabled);
+        Util.logEvent("Parking mode " + (enabled ? "enabled" : "disabled"));
+        Toast.makeText(this, "Parking mode " + (enabled ? "on" : "off"), Toast.LENGTH_SHORT).show();
+        updateParkingUi();
+    }
+
+    /** Reflects the current Parking Mode state on its home-screen card. */
+    private void updateParkingUi() {
+        if (mParkingState == null) return;
+        boolean enabled = Util.isParkingModeEnabled();
+        mParkingState.setText(enabled ? "On" : "Off");
+        mParkingState.setTextColor(getColor(enabled ? R.color.colorAction : R.color.colorTextSecondary));
     }
 
     /** Cycles the app theme System -> Light -> Dark -> System and applies it immediately. */
@@ -219,6 +251,8 @@ public class MainActivity extends AppCompatActivity {
             stopRecTimer();
             mRecTimer.setVisibility(View.GONE);
         }
+
+        updateParkingUi();
     }
 
     /** Formats the elapsed recording time and starts the once-a-second ticker. */

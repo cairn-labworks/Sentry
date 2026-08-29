@@ -175,6 +175,21 @@ public final class Util {
     }
 
     /**
+     * Whether Parking Mode is enabled. In parking mode the dashcam keeps recording even when the
+     * vehicle is stationary (overriding auto-pause), and keeps going until the battery falls to the
+     * low-battery threshold ({@link #getLowBatteryThreshold()}) while unplugged, at which point it
+     * safely stops to avoid draining the phone. Defaults to off. Surfaced as a home-screen toggle.
+     */
+    public static boolean isParkingModeEnabled() {
+        return getPrefs().getBoolean("parking_mode", false);
+    }
+
+    /** Enables or disables Parking Mode. */
+    public static void setParkingMode(boolean enabled) {
+        getPrefs().edit().putBoolean("parking_mode", enabled).apply();
+    }
+
+    /**
      * Preferred vertical video resolution (720, 1080 or 2160). Defaults to 1080.
      */
     public static int getVideoResolution() {

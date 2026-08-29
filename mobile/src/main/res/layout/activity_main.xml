@@ -114,7 +114,7 @@
             android:textSize="15sp" />
     </LinearLayout>
 
-    <!-- Recordings / Settings cards -->
+    <!-- Recordings / Settings / Live view / Parking mode cards -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -124,8 +124,8 @@
         <LinearLayout
             android:id="@+id/card_recordings"
             android:layout_width="0dp"
-            android:layout_height="120dp"
-            android:layout_marginEnd="8dp"
+            android:layout_height="96dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_storage_card"
             android:clickable="true"
@@ -134,26 +134,26 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_movie" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="8dp"
                 android:text="Recordings"
                 android:textColor="@color/colorTextPrimary"
-                android:textSize="16sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/card_settings"
             android:layout_width="0dp"
-            android:layout_height="120dp"
-            android:layout_marginStart="8dp"
+            android:layout_height="96dp"
+            android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_storage_card"
             android:clickable="true"
@@ -162,19 +162,91 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_settings_home" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="8dp"
                 android:text="Settings"
                 android:textColor="@color/colorTextPrimary"
-                android:textSize="16sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/card_live"
+            android:layout_width="0dp"
+            android:layout_height="96dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_storage_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_live" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Live view"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/card_parking"
+            android:layout_width="0dp"
+            android:layout_height="96dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_storage_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/img_parking"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_parking" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Parking mode"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txt_parking_state"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Off"
+                android:textColor="@color/colorTextSecondary"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 

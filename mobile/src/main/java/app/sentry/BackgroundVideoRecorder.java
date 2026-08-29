@@ -833,8 +833,13 @@ public class BackgroundVideoRecorder extends LifecycleService {
             boolean moving = jitter > ACCEL_MOTION_THRESHOLD || mSpeedKmh > SPEED_MOTION_KMH;
             long now = System.currentTimeMillis();
 
-            // If the feature was turned off while we were paused, resume so we don't get stuck.
-            if (mAutoPaused && !Util.isAutoPauseStationaryEnabled()) {
+            // Parking mode keeps recording through stillness: never auto-pause, and resume if we
+            // were paused before parking mode was turned on.
+            boolean parking = Util.isParkingModeEnabled();
+
+            // If auto-pause was turned off (or parking mode turned on) while we were paused, resume
+            // so we don't get stuck.
+            if (mAutoPaused && (parking || !Util.isAutoPauseStationaryEnabled())) {
                 resumeFromStationary();
                 return;
             }
@@ -847,8 +852,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
                 return;
             }
 
-            // Stationary: pause after the configured timeout, if enabled and currently recording.
-            if (!mAutoPaused && Util.isAutoPauseStationaryEnabled()) {
+            // Stationary: pause after the configured timeout, if enabled, not parking, and recording.
+            if (!mAutoPaused && !parking && Util.isAutoPauseStationaryEnabled()) {
                 long timeoutMs = Util.getStationaryTimeoutMinutes() * 60_000L;
                 if (now - mLastMotionAt >= timeoutMs) {
                     pauseForStationary();
