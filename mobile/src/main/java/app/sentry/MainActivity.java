@@ -46,6 +46,9 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView mStorageText, mStoragePercent, mRecSubtitle, mRecTimer;
     private TextView mParkingState;
+    private View mParkingCard;
+    private ImageView mParkingIcon;
+    private android.animation.ObjectAnimator mParkingGlow;
     private ImageView mRecIcon;
 
     private final Handler mTimerHandler = new Handler(Looper.getMainLooper());
@@ -119,6 +122,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         stopRecTimer();
+        stopParkingGlow();
     }
 
     private void bindViews() {
@@ -139,8 +143,10 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(this, ViewRecordingsActivity.class)));
 
         mParkingState = findViewById(R.id.txt_parking_state);
+        mParkingCard = findViewById(R.id.card_parking);
+        mParkingIcon = findViewById(R.id.img_parking);
         findViewById(R.id.card_live).setOnClickListener(v -> openLiveView());
-        findViewById(R.id.card_parking).setOnClickListener(v -> toggleParkingMode());
+        mParkingCard.setOnClickListener(v -> toggleParkingMode());
         updateParkingUi();
     }
 
@@ -167,7 +173,46 @@ public class MainActivity extends AppCompatActivity {
         if (mParkingState == null) return;
         boolean enabled = Util.isParkingModeEnabled();
         mParkingState.setText(enabled ? "On" : "Off");
-        mParkingState.setTextColor(getColor(enabled ? R.color.colorAction : R.color.colorTextSecondary));
+        mParkingState.setTextColor(getColor(enabled
+                ? R.color.colorParkingActive : R.color.colorTextSecondary));
+
+        if (mParkingCard != null) {
+            mParkingCard.setBackgroundResource(enabled
+                    ? R.drawable.bg_parking_active : R.drawable.bg_storage_card);
+        }
+        if (mParkingIcon != null) {
+            if (enabled) {
+                mParkingIcon.setColorFilter(getColor(R.color.colorParkingActive));
+            } else {
+                mParkingIcon.clearColorFilter();
+            }
+        }
+        if (enabled) {
+            startParkingGlow();
+        } else {
+            stopParkingGlow();
+        }
+    }
+
+    /** Starts a slow yellow blink/glow pulse on the Parking card. */
+    private void startParkingGlow() {
+        if (mParkingCard == null || mParkingGlow != null) return;
+        mParkingGlow = android.animation.ObjectAnimator.ofFloat(mParkingCard, "alpha", 1f, 0.4f);
+        mParkingGlow.setDuration(700);
+        mParkingGlow.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+        mParkingGlow.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        mParkingGlow.start();
+    }
+
+    /** Stops the Parking card glow pulse and restores full opacity. */
+    private void stopParkingGlow() {
+        if (mParkingGlow != null) {
+            mParkingGlow.cancel();
+            mParkingGlow = null;
+        }
+        if (mParkingCard != null) {
+            mParkingCard.setAlpha(1f);
+        }
     }
 
     /** Cycles the app theme System -> Light -> Dark -> System and applies it immediately. */

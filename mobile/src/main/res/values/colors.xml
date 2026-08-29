@@ -20,4 +20,5 @@
     <!-- Theme-aware icon tint and action/link text (overridden in values-night) -->
     <color name="colorIcon">#FF37474F</color>
     <color name="colorAction">#3F51B5</color>
+    <color name="colorParkingActive">#FFFFC107</color>
 </resources>
