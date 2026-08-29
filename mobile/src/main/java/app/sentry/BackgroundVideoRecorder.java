@@ -260,9 +260,10 @@ public class BackgroundVideoRecorder extends LifecycleService {
         mVideoCapture.setTargetRotation(mTargetRotation);
 
         // Live preview use case. Its SurfaceProvider is only attached while the Live view screen
-        // is open; when null, Preview simply renders nothing.
+        // is open; when null, Preview simply renders nothing. Built with a fixed ROTATION_0 so the
+        // buffer orientation is constant; LiveViewActivity corrects orientation at the view level.
         mPreview = new Preview.Builder()
-                .setTargetRotation(mTargetRotation)
+                .setTargetRotation(Surface.ROTATION_0)
                 .build();
         mPreview.setSurfaceProvider(sPreviewSurfaceProvider);
 
@@ -756,12 +757,23 @@ public class BackgroundVideoRecorder extends LifecycleService {
         if (inst != null) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 try {
-                    if (inst.mPreview != null) inst.mPreview.setSurfaceProvider(provider);
+                    if (inst.mPreview != null) {
+                        inst.mPreview.setSurfaceProvider(provider);
+                    }
                 } catch (Exception e) {
                     Log.w(TAG, "attachPreview failed", e);
                 }
             });
         }
+    }
+
+    /**
+     * Live device orientation as a {@link Surface} rotation, tracked continuously by the
+     * OrientationEventListener. Used by the Live view to keep the preview upright as the phone moves.
+     */
+    static int getDeviceRotation() {
+        final BackgroundVideoRecorder inst = sInstance;
+        return inst != null ? inst.mTargetRotation : Surface.ROTATION_0;
     }
 
     /** Detaches the preview surface when the Live view screen closes. */

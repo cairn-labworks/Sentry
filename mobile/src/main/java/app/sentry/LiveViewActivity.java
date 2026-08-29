@@ -12,8 +12,7 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.preference.PreferenceManager;
-import android.text.TextUtils;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
@@ -23,17 +22,12 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Live status HUD for the ongoing recording. Shows clock/date, GPS + speed, battery %,
- * battery temperature, resolution/FPS, storage usage, recording state, and a rolling event log.
- * (The camera image itself is owned by the background recorder and is not mirrored here.)
+ * Full-screen live view of the ongoing recording. Mirrors the recorder's camera feed (via a shared
+ * CameraX Preview use case in the same process) and overlays the current speed, resolution/FPS and
+ * battery temperature, plus a REC indicator and a close button.
  */
 public class LiveViewActivity extends AppCompatActivity implements LocationListener {
 
@@ -42,12 +36,11 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private LocationManager mLocationManager;
 
-    private TextView mClock, mDate, mBattery, mSpeed, mTemp, mResFps, mStorage, mGps, mRecStatus, mEventLog;
+    private TextView mSpeed, mTemp, mResFps;
     private PreviewView mPreview;
     private TextView mPreviewHint;
-
-    private final SimpleDateFormat mClockFmt = new SimpleDateFormat("HH:mm:ss", Locale.US);
-    private final SimpleDateFormat mDateFmt = new SimpleDateFormat("EEE, d MMM yyyy", Locale.US);
+    private View mRecDot;
+    private float mAppliedPreviewRotation = Float.NaN;
 
     private final Runnable mTick = new Runnable() {
         @Override
@@ -62,23 +55,35 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_live_view);
+        enterImmersive();
 
-        mClock = findViewById(R.id.txt_clock);
-        mDate = findViewById(R.id.txt_date);
-        mBattery = findViewById(R.id.txt_battery);
         mSpeed = findViewById(R.id.txt_speed);
         mTemp = findViewById(R.id.txt_temp);
         mResFps = findViewById(R.id.txt_resfps);
-        mStorage = findViewById(R.id.txt_storage);
-        mGps = findViewById(R.id.txt_gps);
-        mRecStatus = findViewById(R.id.txt_recstatus);
-        mEventLog = findViewById(R.id.txt_eventlog);
         mPreview = findViewById(R.id.preview);
         mPreviewHint = findViewById(R.id.txt_preview_hint);
+        mRecDot = findViewById(R.id.rec_dot);
 
         findViewById(R.id.btn_close).setOnClickListener(v -> finish());
 
         mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) enterImmersive();
+    }
+
+    /** Hides the status and navigation bars for a full-screen camera feed. */
+    private void enterImmersive() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
     @Override
@@ -88,8 +93,51 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         startLocationIfPermitted();
         // Feed the ongoing recording's camera into our PreviewView (same process as the recorder).
         if (mPreview != null) {
+            mPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
             BackgroundVideoRecorder.attachPreview(mPreview.getSurfaceProvider());
+            mAppliedPreviewRotation = Float.NaN;
+            mPreview.post(this::applyPreviewOrientation);
         }
+    }
+
+    /**
+     * Keeps the live feed upright by rotating the PreviewView based on the phone's current physical
+     * orientation (tracked live by the recorder's sensors) relative to this screen's display
+     * rotation. Re-evaluated each tick so it follows the device as it turns, and works for either
+     * landscape mount direction. The shared Preview is bound headless at ROTATION_0, so a constant
+     * 90 degree offset accounts for the camera sensor orientation (calibrated on-device).
+     */
+    private void applyPreviewOrientation() {
+        if (mPreview == null) return;
+        View parent = (View) mPreview.getParent();
+        if (parent == null) return;
+        int cw = parent.getWidth();
+        int ch = parent.getHeight();
+        if (cw == 0 || ch == 0) return;
+
+        int deviceRotDeg = BackgroundVideoRecorder.getDeviceRotation() * 90;
+        int dispRotDeg = (mPreview.getDisplay() != null
+                ? mPreview.getDisplay().getRotation()
+                : getWindowManager().getDefaultDisplay().getRotation()) * 90;
+        float degrees = ((deviceRotDeg - dispRotDeg + 90) % 360 + 360) % 360;
+
+        if (degrees == mAppliedPreviewRotation && mPreview.getWidth() == cw
+                && mPreview.getHeight() == ch) {
+            return; // No change; avoid re-laying out every tick.
+        }
+        mAppliedPreviewRotation = degrees;
+
+        boolean quarter = (Math.round(degrees / 90f) % 2) != 0;
+        mPreview.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        android.view.ViewGroup.LayoutParams lp = mPreview.getLayoutParams();
+        lp.width = cw;
+        lp.height = ch;
+        mPreview.setLayoutParams(lp);
+        // Scale up so the rotated frame still fills the screen (no letterboxing).
+        float scale = quarter ? (float) Math.max(cw, ch) / Math.min(cw, ch) : 1f;
+        mPreview.setScaleX(scale);
+        mPreview.setScaleY(scale);
+        mPreview.setRotation(degrees);
     }
 
     @Override
@@ -105,33 +153,17 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
     // --- Telemetry refresh (once per second) ---
 
     private void refresh() {
-        long now = System.currentTimeMillis();
-        mClock.setText(mClockFmt.format(new Date(now)));
-        mDate.setText(mDateFmt.format(new Date(now)));
-
-        refreshBatteryAndTemp();
-        refreshStorage();
+        refreshTemp();
         refreshResFps();
-        refreshRecStatus(now);
-        refreshEventLog();
+        refreshRecIndicator();
+        applyPreviewOrientation();
     }
 
-    private void refreshBatteryAndTemp() {
+    private void refreshTemp() {
         Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (battery == null) return;
 
-        int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-        int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
         int tempTenths = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
-
-        if (level >= 0 && scale > 0) {
-            int pct = Math.round(level * 100f / scale);
-            boolean charging = status == BatteryManager.BATTERY_STATUS_CHARGING
-                    || status == BatteryManager.BATTERY_STATUS_FULL;
-            mBattery.setText(pct + "%" + (charging ? " \u26A1" : ""));
-        }
-
         if (tempTenths != Integer.MIN_VALUE) {
             int tempC = Math.round(tempTenths / 10f);
             String label;
@@ -151,43 +183,20 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
         }
     }
 
-    private void refreshStorage() {
-        File root = Util.getVideosDirectoryPath();
-        long usedMb = Util.getFolderSize(root);
-        long quotaMb = Util.getQuota();
-        mStorage.setText(String.format(Locale.US, "%.1f / %.1f GB", usedMb / 1024f, quotaMb / 1024f));
-    }
-
     private void refreshResFps() {
         int res = Util.getVideoResolution();
         String label = (res >= 2160) ? "4K" : (res + "P");
         mResFps.setText(label + " \u00B7 30 FPS");
     }
 
-    private void refreshRecStatus(long now) {
-        if (BackgroundVideoRecorder.isRecording) {
-            if (mPreviewHint != null) mPreviewHint.setVisibility(android.view.View.GONE);
-            long elapsedMs = Math.max(0, now - BackgroundVideoRecorder.recordingStartedAt);
-            long h = TimeUnit.MILLISECONDS.toHours(elapsedMs);
-            long m = TimeUnit.MILLISECONDS.toMinutes(elapsedMs) % 60;
-            long s = TimeUnit.MILLISECONDS.toSeconds(elapsedMs) % 60;
-
-            String clip = PreferenceManager.getDefaultSharedPreferences(this)
-                    .getString(getString(R.string.current_recording_preferences_key), "");
-            String clipName = TextUtils.isEmpty(clip) ? "" : "   \u00B7   " + new File(clip).getName();
-
-            mRecStatus.setText(String.format(Locale.US, "\u25CF REC   %02d:%02d:%02d%s", h, m, s, clipName));
-            mRecStatus.setTextColor(0xFFFF5252);
-        } else {
-            if (mPreviewHint != null) mPreviewHint.setVisibility(android.view.View.VISIBLE);
-            mRecStatus.setText("Not recording");
-            mRecStatus.setTextColor(0xFF90A4AE);
+    private void refreshRecIndicator() {
+        boolean recording = BackgroundVideoRecorder.isRecording;
+        if (mPreviewHint != null) {
+            mPreviewHint.setVisibility(recording ? android.view.View.GONE : android.view.View.VISIBLE);
         }
-    }
-
-    private void refreshEventLog() {
-        List<String> events = Util.getEventLog();
-        mEventLog.setText(events.isEmpty() ? "No events yet." : TextUtils.join("\n", events));
+        if (mRecDot != null) {
+            mRecDot.setVisibility(recording ? android.view.View.VISIBLE : android.view.View.GONE);
+        }
     }
 
     // --- Location (GPS + speed) ---
@@ -199,7 +208,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     private void startLocationIfPermitted() {
         if (!hasLocationPermission()) {
-            mGps.setText("Location permission needed for GPS & speed");
+            mSpeed.setText("-- km/h");
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION);
             return;
@@ -214,7 +223,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
                 if (last != null) onLocationChanged(last);
             }
         } catch (SecurityException | IllegalArgumentException e) {
-            mGps.setText("GPS unavailable");
+            mSpeed.setText("-- km/h");
         }
     }
 
@@ -237,8 +246,6 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
-        mGps.setText(String.format(Locale.US, "%.5f\u00B0, %.5f\u00B0",
-                location.getLatitude(), location.getLongitude()));
         float speedKmh = location.hasSpeed() ? location.getSpeed() * 3.6f : 0f;
         mSpeed.setText(String.format(Locale.US, "%.0f km/h", speedKmh));
     }
