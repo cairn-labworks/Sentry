@@ -102,6 +102,7 @@ public class Widget {
         View liveViewView;
         View recView;
         View homeView;
+        View parkingView;
         View stopAndQuitView;
         View layoutMenu;
         boolean areSecondaryWidgetsShown = false;
@@ -129,11 +130,13 @@ public class Widget {
             rootViewMenu = LayoutInflater.from(context).inflate(R.layout.layout_widget_menu, null);
             liveViewView = rootViewMenu.findViewById(R.id.live_view_button);
             homeView = rootViewMenu.findViewById(R.id.home_button);
+            parkingView = rootViewMenu.findViewById(R.id.parking_button);
             stopAndQuitView = rootViewMenu.findViewById(R.id.stop_and_quit_button);
             layoutMenu = rootViewMenu.findViewById(R.id.layout_menu);
 
             liveViewView.setOnClickListener(this);
             homeView.setOnClickListener(this);
+            parkingView.setOnClickListener(this);
             stopAndQuitView.setOnClickListener(this);
 
             // The REC button supports both tap (toggle menu) and long-press-drag (reposition)
@@ -231,6 +234,14 @@ public class Widget {
                 Intent homeIntent = new Intent(service, MainActivity.class);
                 homeIntent.setFlags(FLAG_ACTIVITY_NEW_TASK);
                 service.startActivity(homeIntent);
+                hideSecondaryWidgets();
+            } else if (id == R.id.parking_button) {
+                boolean enabled = !Util.isParkingModeEnabled();
+                Util.setParkingMode(enabled);
+                Util.logEvent("Parking mode " + (enabled ? "enabled" : "disabled"));
+                android.widget.Toast.makeText(service,
+                        "Parking mode " + (enabled ? "on" : "off"),
+                        android.widget.Toast.LENGTH_SHORT).show();
                 hideSecondaryWidgets();
             } else if (id == R.id.stop_and_quit_button) {
                 // Stop video recording service
