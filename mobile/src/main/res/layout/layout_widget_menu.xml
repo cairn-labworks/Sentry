@@ -4,55 +4,67 @@
              android:layout_height="wrap_content"
              android:visibility="gone">
 
-    <LinearLayout
+    <!-- Buttons fan out along an arc radiating from the REC bubble (left-center). Each button is
+         anchored at the frame's left-center and offset with translationX/Y onto the arc. -->
+    <FrameLayout
         android:id="@+id/layout_menu"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="180dp"
+        android:layout_height="264dp"
         android:layout_gravity="center_vertical|start"
         android:layout_marginStart="@dimen/horizontal_widget_distance_large"
-        android:orientation="vertical">
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/stop_and_quit_button"
             android:layout_width="56dp"
             android:layout_height="56dp"
+            android:layout_gravity="center_vertical|start"
             android:background="@drawable/bg_widget_circle"
             android:contentDescription="Stop recording"
             android:padding="16dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_stop" />
+            android:src="@drawable/ic_widget_stop"
+            android:translationX="60dp"
+            android:translationY="-98dp" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/home_button"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
+            android:layout_gravity="center_vertical|start"
             android:background="@drawable/bg_widget_circle"
             android:contentDescription="Home"
             android:padding="16dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_home" />
+            android:src="@drawable/ic_widget_home"
+            android:translationX="99dp"
+            android:translationY="-36dp" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/live_view_button"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
+            android:layout_gravity="center_vertical|start"
             android:background="@drawable/bg_widget_circle"
             android:contentDescription="Live view"
             android:padding="16dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_live" />
+            android:src="@drawable/ic_widget_live"
+            android:translationX="99dp"
+            android:translationY="36dp" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/parking_button"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:layout_marginTop="@dimen/vertical_widget_distance"
+            android:layout_gravity="center_vertical|start"
             android:background="@drawable/bg_widget_circle"
             android:contentDescription="Parking mode"
             android:padding="16dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_parking" />
-    </LinearLayout>
+            android:src="@drawable/ic_widget_parking"
+            android:translationX="60dp"
+            android:translationY="98dp" />
+    </FrameLayout>
 </FrameLayout>
