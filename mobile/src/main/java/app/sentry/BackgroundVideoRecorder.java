@@ -79,6 +79,12 @@ public class BackgroundVideoRecorder extends LifecycleService {
 
     /** Whether the background recorder is currently active (read by the Live view). */
     public static volatile boolean isRecording = false;
+    /**
+     * Whether recording is currently auto-paused because the vehicle has been detected as
+     * stationary (parked). {@link #isRecording} stays {@code true} throughout; this flag lets the
+     * UI distinguish "recording" from "paused". Read by the home screen.
+     */
+    public static volatile boolean isAutoPaused = false;
     /** When the current recording session started (millis), for elapsed display. */
     public static volatile long recordingStartedAt = 0L;
 
@@ -213,6 +219,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
         mGlHandler = new Handler(mGlThread.getLooper());
 
         isRecording = true;
+        isAutoPaused = false;
         recordingStartedAt = System.currentTimeMillis();
         Util.logEvent("Recording started");
 
@@ -887,6 +894,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private void pauseForStationary() {
         if (mAutoPaused || mStopping) return;
         mAutoPaused = true;
+        isAutoPaused = true;
         Log.i(TAG, "Auto-pause: stationary for " + Util.getStationaryTimeoutMinutes() + " min");
         Util.logEvent("Auto-pause: stationary for "
                 + Util.getStationaryTimeoutMinutes() + " min");
@@ -905,6 +913,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
     private void resumeFromStationary() {
         if (!mAutoPaused) return;
         mAutoPaused = false;
+        isAutoPaused = false;
         mLastMotionAt = System.currentTimeMillis();
         Log.i(TAG, "Auto-resume: motion detected");
         Util.logEvent("Auto-resume: motion detected");
@@ -919,6 +928,7 @@ public class BackgroundVideoRecorder extends LifecycleService {
     public void onDestroy() {
         mStopping = true;
         isRecording = false;
+        isAutoPaused = false;
         Util.logEvent("Recording stopped");
 
         stopLocationUpdates();

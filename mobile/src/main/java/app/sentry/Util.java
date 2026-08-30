@@ -362,6 +362,14 @@ public final class Util {
     }
 
     /**
+     * Whether recording is currently auto-paused because the vehicle has been detected as
+     * stationary (parked). Only meaningful while {@link #isRecording()} is {@code true}.
+     */
+    public static boolean isRecordingPaused() {
+        return BackgroundVideoRecorder.isRecording && BackgroundVideoRecorder.isAutoPaused;
+    }
+
+    /**
      * Whether the mandatory recording permissions (camera, mic, overlay) are granted.
      */
     public static boolean hasRecordingPermissions(Context context) {

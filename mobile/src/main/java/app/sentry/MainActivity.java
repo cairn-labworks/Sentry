@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -50,6 +51,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView mParkingIcon;
     private android.animation.ObjectAnimator mParkingGlow;
     private ImageView mRecIcon;
+    private View mRecButton;
+    /** Last paused-state rendered on the REC button, so the ticker can detect transitions. */
+    private boolean mShownPaused = false;
 
     private final Handler mTimerHandler = new Handler(Looper.getMainLooper());
     private final Runnable mTimerTick = new Runnable() {
@@ -58,6 +62,12 @@ public class MainActivity extends AppCompatActivity {
             if (!Util.isRecording()) {
                 // Recording was stopped elsewhere (e.g. the overlay widget's "Stop"
                 // button). Revert the whole home screen to its idle state and stop ticking.
+                updateUi();
+                return;
+            }
+            if (Util.isRecordingPaused() != mShownPaused) {
+                // Auto-paused/resumed while the home screen is open (parked or motion returned).
+                // Re-render the REC button to the new stage; updateUi() reschedules the ticker.
                 updateUi();
                 return;
             }
@@ -131,8 +141,9 @@ public class MainActivity extends AppCompatActivity {
         mRecSubtitle = findViewById(R.id.rec_subtitle);
         mRecTimer = findViewById(R.id.rec_timer);
         mRecIcon = findViewById(R.id.rec_icon);
+        mRecButton = findViewById(R.id.btn_rec);
 
-        findViewById(R.id.btn_rec).setOnClickListener(v -> onRecClicked());
+        mRecButton.setOnClickListener(v -> onRecClicked());
         ImageView themeBtn = findViewById(R.id.btn_settings);
         themeBtn.setContentDescription("Switch theme");
         themeBtn.setOnClickListener(v -> cycleTheme());
@@ -279,15 +290,37 @@ public class MainActivity extends AppCompatActivity {
         int pct = quotaMb > 0 ? (int) Math.min(100, usedMb * 100 / quotaMb) : 0;
         mStoragePercent.setText(pct + "%");
 
-        // REC state
+        // REC state: three stages -> stopped / recording / paused (parked).
         boolean recording = Util.isRecording();
-        mRecSubtitle.setText(recording
-                ? "Recording in progress. Tap to stop."
-                : "Mount securely. Tap to start.");
-        mRecIcon.setImageResource(recording
-                ? R.drawable.ic_rec_active
-                : R.drawable.ic_rec_camera);
-        mRecIcon.setContentDescription(recording ? "Stop recording" : "Start recording");
+        boolean paused = recording && Util.isRecordingPaused();
+        mShownPaused = paused;
+
+        int iconRes;
+        int circleColorRes;
+        String subtitle;
+        String contentDesc;
+        if (!recording) {
+            iconRes = R.drawable.ic_rec_camera;
+            circleColorRes = R.color.colorRecStopped;
+            subtitle = "Mount securely. Tap to start.";
+            contentDesc = "Start recording";
+        } else if (paused) {
+            iconRes = R.drawable.ic_rec_paused;
+            circleColorRes = R.color.colorRecPaused;
+            subtitle = "Paused — parked. Tap to stop.";
+            contentDesc = "Recording paused. Tap to stop";
+        } else {
+            iconRes = R.drawable.ic_rec_active;
+            circleColorRes = R.color.colorRecActive;
+            subtitle = "Recording in progress. Tap to stop.";
+            contentDesc = "Stop recording";
+        }
+        mRecSubtitle.setText(subtitle);
+        mRecIcon.setImageResource(iconRes);
+        mRecIcon.setContentDescription(contentDesc);
+        if (mRecButton != null) {
+            mRecButton.setBackgroundTintList(ColorStateList.valueOf(getColor(circleColorRes)));
+        }
 
         if (recording) {
             mRecTimer.setVisibility(View.VISIBLE);
@@ -314,6 +347,10 @@ public class MainActivity extends AppCompatActivity {
     /** Updates the elapsed-time label from the recorder's start timestamp. */
     private void updateRecTimer() {
         if (!Util.isRecording()) {
+            return;
+        }
+        if (Util.isRecordingPaused()) {
+            mRecTimer.setText("Paused");
             return;
         }
         long startedAt = BackgroundVideoRecorder.recordingStartedAt;

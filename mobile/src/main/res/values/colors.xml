@@ -21,4 +21,9 @@
     <color name="colorIcon">#FF37474F</color>
     <color name="colorAction">#3F51B5</color>
     <color name="colorParkingActive">#FFFFC107</color>
+
+    <!-- Home-screen REC button states -->
+    <color name="colorRecActive">#FFE53935</color>
+    <color name="colorRecPaused">#FFFFC107</color>
+    <color name="colorRecStopped">#FF546E7A</color>
 </resources>
