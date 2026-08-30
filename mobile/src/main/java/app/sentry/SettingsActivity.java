@@ -241,7 +241,7 @@ public class SettingsActivity extends AppCompatActivity {
         final TextView value = findViewById(R.id.storage_value);
         final TextView free = findViewById(R.id.storage_free);
 
-        int gb = Math.max(1, Math.min(32, Math.round(Util.getQuota() / 1024f)));
+        int gb = Math.max(1, Math.min(128, Math.round(Util.getQuota() / 1024f)));
         slider.setValue(gb);
         value.setText(gb + " GB");
 

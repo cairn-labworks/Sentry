@@ -243,7 +243,7 @@
                     android:layout_marginTop="8dp"
                     android:stepSize="1"
                     android:valueFrom="1"
-                    android:valueTo="32" />
+                    android:valueTo="128" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
