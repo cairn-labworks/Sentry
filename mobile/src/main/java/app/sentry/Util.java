@@ -175,6 +175,14 @@ public final class Util {
     }
 
     /**
+     * Whether the microphone audio track should be captured into recordings. When disabled,
+     * clips are recorded video-only (no sound). Defaults to on so existing behaviour is preserved.
+     */
+    public static boolean isAudioRecordingEnabled() {
+        return getPrefs().getBoolean("record_audio_enabled", true);
+    }
+
+    /**
      * Whether Parking Mode is enabled. In parking mode the dashcam keeps recording even when the
      * vehicle is stationary (overriding auto-pause), and keeps going until the battery falls to the
      * low-battery threshold ({@link #getLowBatteryThreshold()}) while unplugged, at which point it

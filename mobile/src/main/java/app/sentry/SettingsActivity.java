@@ -319,6 +319,11 @@ public class SettingsActivity extends AppCompatActivity {
         silent.setOnCheckedChangeListener((b, checked) ->
                 prefs.edit().putBoolean("disable_sound", checked).apply());
 
+        SwitchMaterial recordAudio = findViewById(R.id.switch_record_audio);
+        recordAudio.setChecked(Util.isAudioRecordingEnabled());
+        recordAudio.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("record_audio_enabled", checked).apply());
+
         SwitchMaterial maps = findViewById(R.id.switch_maps);
         maps.setChecked(prefs.getBoolean("start_maps_in_background", true));
         maps.setOnCheckedChangeListener((b, checked) ->

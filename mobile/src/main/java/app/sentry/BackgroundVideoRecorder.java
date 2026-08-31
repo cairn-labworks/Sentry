@@ -548,7 +548,8 @@ public class BackgroundVideoRecorder extends LifecycleService {
         FileOutputOptions outputOptions = outputOptionsBuilder.build();
 
         PendingRecording pending = mRecorder.prepareRecording(this, outputOptions);
-        boolean audio = ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+        boolean audio = Util.isAudioRecordingEnabled()
+                && ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED;
         if (audio) {
             try {
