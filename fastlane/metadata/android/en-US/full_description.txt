@@ -1,0 +1,21 @@
+OpenDash turns your Android phone into a capable dash cam. It records continuously in the background while you use navigation, music, and other apps without taking over the screen.
+
+Recordings loop within a storage budget you set, so the app can run indefinitely without filling the phone. Important moments can be starred so they are never overwritten.
+
+Features:
+
+* Record fixed-length clips in the background using the rear camera.
+* Automatically delete the oldest non-starred clips within a chosen storage limit.
+* Star important clips so they survive automatic rotation.
+* Burn date, time, GPS location, and speed into the video.
+* Browse, filter, select, and delete recordings.
+* View a live camera preview with a GPS and speed display.
+* Control recording from a draggable overlay widget.
+* Start recording from a home-screen shortcut.
+* Choose the recording resolution, including UHD on supported devices.
+* Apply night scene mode during a configurable schedule.
+* Select system, light, or dark theme.
+* Receive overheating warnings and optionally stop on low battery.
+* Automatically start and stop recording when power is connected or disconnected.
+
+Location is optional and is used only for the on-video location and speed overlay.
