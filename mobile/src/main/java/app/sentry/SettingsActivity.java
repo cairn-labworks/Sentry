@@ -57,7 +57,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
-            actionBar.setTitle("Dashcam Settings");
+            actionBar.setTitle(getString(R.string.app_name) + " Settings");
             actionBar.setDisplayHomeAsUpEnabled(true);
         }
 

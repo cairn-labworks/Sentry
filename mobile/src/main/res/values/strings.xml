@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Sentry</string>
+    <string name="app_name">Sentry : DashCam</string>
 
     <!-- DB Keys -->
     <string name="db_first_launch_complete_flag">FIRST_LAUNCH_FLAG</string>
