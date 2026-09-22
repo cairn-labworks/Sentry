@@ -32,7 +32,9 @@
         android:textColor="#FFFFFFFF"
         android:textSize="22sp" />
 
-    <!-- Telemetry overlay (top): REC + speed / resolution / temperature -->
+    <!-- Telemetry overlay (top): REC + date/time / temperature.
+         Speed is intentionally omitted in portrait to give the remaining cells enough
+         width to stay aligned on the narrower screen. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -54,18 +56,6 @@
             android:textSize="15sp"
             android:textStyle="bold"
             android:visibility="gone" />
-
-        <LinearLayout style="@style/HudCell">
-
-            <TextView
-                style="@style/HudLabel"
-                android:text="SPEED" />
-
-            <TextView
-                android:id="@+id/txt_speed"
-                style="@style/HudValueLarge"
-                android:text="0 km/h" />
-        </LinearLayout>
 
         <LinearLayout style="@style/HudCell">
 

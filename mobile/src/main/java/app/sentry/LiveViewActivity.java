@@ -188,7 +188,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     private void startLocationIfPermitted() {
         if (!hasLocationPermission()) {
-            mSpeed.setText("-- km/h");
+            if (mSpeed != null) mSpeed.setText("-- km/h");
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION);
             return;
@@ -203,7 +203,7 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
                 if (last != null) onLocationChanged(last);
             }
         } catch (SecurityException | IllegalArgumentException e) {
-            mSpeed.setText("-- km/h");
+            if (mSpeed != null) mSpeed.setText("-- km/h");
         }
     }
 
@@ -226,6 +226,8 @@ public class LiveViewActivity extends AppCompatActivity implements LocationListe
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
+        // Speed cell is only present in the landscape layout; skip if it's not shown.
+        if (mSpeed == null) return;
         float speedKmh = location.hasSpeed() ? location.getSpeed() * 3.6f : 0f;
         mSpeed.setText(String.format(Locale.US, "%.0f km/h", speedKmh));
     }
