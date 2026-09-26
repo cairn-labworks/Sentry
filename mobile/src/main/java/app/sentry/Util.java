@@ -111,6 +111,15 @@ public final class Util {
     }
 
     /**
+     * Whether the app should safely stop recording and quit when the battery temperature reaches
+     * {@link #getOverheatThreshold()}, to protect the device. Off by default; this is a stronger
+     * action than the overheating alert and is controlled independently of it.
+     */
+    public static boolean isOverheatShutdownEnabled() {
+        return getPrefs().getBoolean("enable_overheat_shutdown", false);
+    }
+
+    /**
      * Whether the app should safely shut down when the battery gets low and is not charging.
      */
     public static boolean isLowBatteryShutdownEnabled() {

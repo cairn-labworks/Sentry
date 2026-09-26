@@ -87,6 +87,8 @@ Starred recordings will not be deleted.</string>
     <string name="overheat_warning_title">Phone overheating</string>
     <string name="overheat_warning_text">Battery temperature is %1$d\u00B0C. Consider cooling the
         phone or stopping recording to protect battery health.</string>
+    <string name="overheat_shutdown_message">Battery too hot (%1$d\u00B0C). Saving the current clip
+        and stopping Sentry to protect the device.</string>
     <string name="low_battery_shutdown_message">Battery low (%1$d%%) and not charging. Saving the
         current clip and shutting down Sentry.</string>
     <string name="auto_stop_discharge_message">Charger disconnected. Saving the current clip and

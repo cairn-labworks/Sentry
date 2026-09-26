@@ -76,20 +76,29 @@ public class WidgetService extends Service {
                 }
             }
 
-            // Overheating alert (battery temperature is reported in tenths of a degree Celsius)
-            if (tempTenths != Integer.MIN_VALUE && Util.isOverheatAlertEnabled()) {
+            // Overheating (battery temperature is reported in tenths of a degree Celsius)
+            if (tempTenths != Integer.MIN_VALUE) {
                 int tempC = Math.round(tempTenths / 10f);
                 if (tempC >= Util.getOverheatThreshold()) {
-                    long now = System.currentTimeMillis();
-                    if (now - mLastOverheatWarnMs >= OVERHEAT_WARN_INTERVAL_MS) {
-                        mLastOverheatWarnMs = now;
-                        String text = getString(R.string.overheat_warning_text, tempC);
-                        Util.showWarningNotification(
-                                getApplicationContext(),
-                                getString(R.string.overheat_warning_title),
-                                text);
-                        Util.showToastLong(getApplicationContext(), text);
-                        Util.logEvent("Overheating: " + tempC + "\u00B0C");
+                    // Warn the user (rate-limited), if the alert is enabled.
+                    if (Util.isOverheatAlertEnabled()) {
+                        long now = System.currentTimeMillis();
+                        if (now - mLastOverheatWarnMs >= OVERHEAT_WARN_INTERVAL_MS) {
+                            mLastOverheatWarnMs = now;
+                            String text = getString(R.string.overheat_warning_text, tempC);
+                            Util.showWarningNotification(
+                                    getApplicationContext(),
+                                    getString(R.string.overheat_warning_title),
+                                    text);
+                            Util.showToastLong(getApplicationContext(), text);
+                            Util.logEvent("Overheating: " + tempC + "\u00B0C");
+                        }
+                    }
+                    // Safely stop recording to protect the device, if that flag is enabled.
+                    if (Util.isOverheatShutdownEnabled()) {
+                        Util.logEvent("Auto-stop: battery overheating " + tempC + "\u00B0C");
+                        safeShutdown(getString(R.string.overheat_shutdown_message, tempC));
+                        return;
                     }
                 }
             }

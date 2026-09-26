@@ -269,6 +269,11 @@ public class SettingsActivity extends AppCompatActivity {
                 Util.getOverheatThreshold(),
                 value -> prefs.edit().putString("overheat_threshold_c", String.valueOf(value)).apply());
 
+        SwitchMaterial overheatShutdown = findViewById(R.id.switch_overheat_shutdown);
+        overheatShutdown.setChecked(Util.isOverheatShutdownEnabled());
+        overheatShutdown.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean("enable_overheat_shutdown", checked).apply());
+
         SwitchMaterial lowbatt = findViewById(R.id.switch_lowbatt);
         lowbatt.setChecked(Util.isLowBatteryShutdownEnabled());
         lowbatt.setOnCheckedChangeListener((b, checked) ->
