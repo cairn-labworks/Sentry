@@ -3,36 +3,22 @@ package app.sentry;
 import android.os.AsyncTask;
 
 /**
- * Helper for accessing features in {@link AsyncTask}
- * introduced after API level 4 in a backwards compatible fashion.
- * <p>
- * This class has been removed from support library version 26+
- * <p>
- * Created by Dmitriy V. Chernysh
- * <p>
- * https://instagr.am/mobiledevpro
- * https://github.com/dmitriy-chernysh
- * #MobileDevPro
+ * Tiny helper that launches an {@link AsyncTask} on the shared thread pool.
+ *
+ * <p>The platform default runs tasks serially; here we opt into parallel
+ * execution explicitly so unrelated background jobs do not queue behind one
+ * another. Kept as a small seam so the concurrency strategy lives in one place.
  */
+final class AsyncTaskCompat {
 
-public class AsyncTaskCompat {
-    /**
-     * Executes the task with the specified parameters, allowing multiple tasks to run in parallel
-     * on a pool of threads managed by {@link AsyncTask}.
-     *
-     * @param task   The {@link AsyncTask} to execute.
-     * @param params The parameters of the task.
-     * @return the instance of AsyncTask.
-     */
-    public static <Params, Progress, Result> AsyncTask<Params, Progress, Result> executeParallel(
-            AsyncTask<Params, Progress, Result> task, Params... params) {
+    private AsyncTaskCompat() {
+    }
+
+    @SafeVarargs
+    public static <P, Prog, R> AsyncTask<P, Prog, R> executeParallel(AsyncTask<P, Prog, R> task, P... params) {
         if (task == null) {
-            throw new IllegalArgumentException("task can not be null");
+            throw new IllegalArgumentException("task must not be null");
         }
-
-        // From API 11 onwards, we need to manually select the THREAD_POOL_EXECUTOR
-        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
-
-        return task;
+        return task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
     }
 }

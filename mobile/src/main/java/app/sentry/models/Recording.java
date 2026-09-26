@@ -9,92 +9,85 @@ import app.sentry.Util;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 
 /**
- * Model class for video recording
+ * One captured dash-cam clip on disk, plus the small amount of catalogue state
+ * (row id, starred flag) that the app tracks alongside the file.
+ *
+ * <p>Human-readable date and time are derived lazily from the file's
+ * last-modified timestamp so the list can show when each clip was recorded.
  */
-
 public class Recording {
-    private int id;
-    private String filePath;
-    private String filename;
-    private String dateSaved;
-    private String timeSaved;
-    private DBHelper dbHelper;
 
-    private static SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("EEE MMM d");
-    private static SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
+    private static final SimpleDateFormat DAY_LABEL = new SimpleDateFormat("EEE MMM d", Locale.getDefault());
+    private static final SimpleDateFormat CLOCK_LABEL = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
-    /**
-     * Constructor for selecting rows from SQLite
-     *
-     * @param id       Unique id
-     * @param filePath String
-     */
+    private final int id;
+    private final String filePath;
+    private final String fileName;
+    private String dayLabel;
+    private String clockLabel;
+
+    /** Builds a clip loaded from a catalogue row. */
     public Recording(int id, String filePath) {
-        dbHelper = DBHelper.getInstance(SentryApp.getAppContext());
         this.id = id;
         this.filePath = filePath;
-        this.filename = new File(filePath).getName();
-        getDatesFromFile();
+        this.fileName = filePath != null ? new File(filePath).getName() : "";
+        computeLabels();
     }
 
-    /**
-     * Constructor for create a new recording from Video Recorder
-     *
-     * @param filePath String
-     */
+    /** Builds a brand-new clip that has not been catalogued yet. */
     public Recording(String filePath) {
         this(-1, filePath);
-    }
-
-    public String getFilePath() {
-        return !TextUtils.isEmpty(filePath) ? filePath : "";
-    }
-
-    public String getFileName() {
-        return !TextUtils.isEmpty(filename) ? filename : "";
-    }
-
-    public String getDateSaved() {
-        return dateSaved;
-    }
-
-    public String getTimeSaved() {
-        return timeSaved;
-    }
-
-    public boolean isStarred() {
-        return dbHelper.isRecordingStarred(this);
-    }
-
-    /**
-     * Checks/unchecks a recording as starred in DB. Intended to be called by
-     * OnCheckedChangeListener when video is starred/unstarred by the user.
-     *
-     * @param isChecked Whether or not checkbox was marked as checked
-     * @return True when marked as checked in DB, False otherwise
-     */
-    public boolean toggleStar(boolean isChecked) {
-        //this item will be updated in the UI when asynctask will be finished
-        Util.updateStar(this);
-        return true;
-    }
-
-    private void getDatesFromFile() {
-        if (filePath != null && !filePath.isEmpty()) {
-            File file = new File(filePath);
-            Date lastModDate = new Date(file.lastModified());
-            dateSaved = DATE_FORMAT.format(lastModDate);
-            timeSaved = TIME_FORMAT.format(lastModDate);
-        } else {
-            dateSaved = "Video " + id;
-            timeSaved = "";
-        }
     }
 
     public int getId() {
         return id;
     }
 
+    public String getFilePath() {
+        return TextUtils.isEmpty(filePath) ? "" : filePath;
+    }
+
+    public String getFileName() {
+        return TextUtils.isEmpty(fileName) ? "" : fileName;
+    }
+
+    public String getDateSaved() {
+        return dayLabel;
+    }
+
+    public String getTimeSaved() {
+        return clockLabel;
+    }
+
+    /** Looks up the starred state in the catalogue. */
+    public boolean isStarred() {
+        return DBHelper.getInstance(SentryApp.getAppContext()).isRecordingStarred(this);
+    }
+
+    /**
+     * Requests a star toggle. The catalogue write happens off the UI thread;
+     * the row is refreshed once it completes.
+     *
+     * @param isChecked desired checkbox state (unused: the store toggles the
+     *                  current value)
+     * @return {@code true} — the request was accepted
+     */
+    public boolean toggleStar(boolean isChecked) {
+        Util.updateStar(this);
+        return true;
+    }
+
+    private void computeLabels() {
+        if (!TextUtils.isEmpty(filePath)) {
+            Date modified = new Date(new File(filePath).lastModified());
+            dayLabel = DAY_LABEL.format(modified);
+            clockLabel = CLOCK_LABEL.format(modified);
+        } else {
+            dayLabel = "Video " + id;
+            clockLabel = "";
+        }
+    }
 }

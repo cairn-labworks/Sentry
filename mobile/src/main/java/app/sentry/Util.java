@@ -7,7 +7,6 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
-import android.hardware.Camera;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -430,20 +429,17 @@ public final class Util {
     }
 
     public static File getVideosDirectoryPath() {
-        //remove an old directory if exists
-        File oldDirectory = new File(Environment.getExternalStorageDirectory() + "/Sentry/");
-        removeNonEmptyDirectory(oldDirectory);
+        // Clean up a legacy public folder used by older builds, if it lingers.
+        removeNonEmptyDirectory(new File(Environment.getExternalStorageDirectory(), "Sentry"));
 
-        //New directory
-        File appVideosFolder = getAppPrivateVideosFolder(SentryApp.getAppContext());
-
-        if (appVideosFolder != null) {
-            //create app-private folder if not exists
-            if (!appVideosFolder.exists()) appVideosFolder.mkdir();
-            return appVideosFolder;
+        File folder = getAppPrivateVideosFolder(SentryApp.getAppContext());
+        if (folder == null) {
+            return null;
         }
-
-        return null;
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        return folder;
     }
 
     /**
@@ -457,25 +453,25 @@ public final class Util {
     }
 
     /**
-     * Display a 9-seconds-long toast.
-     * Inspired by https://stackoverflow.com/a/7173248
+     * Shows a toast that stays visible for roughly nine seconds by re-showing a
+     * short toast on a repeating timer (a single Toast otherwise disappears too
+     * quickly for an important warning).
      *
      * @param context Application context
      * @param msg     Message to display
      */
     public static void showToastLong(Context context, String msg) {
-        final Toast tag = Toast.makeText(context, msg, Toast.LENGTH_SHORT);
-
-        tag.show();
+        final Toast toast = Toast.makeText(context, msg, Toast.LENGTH_SHORT);
+        toast.show();
 
         new CountDownTimer(9000, 1000) {
 
             public void onTick(long millisUntilFinished) {
-                tag.show();
+                toast.show();
             }
 
             public void onFinish() {
-                tag.show();
+                toast.show();
             }
 
         }.start();
@@ -500,39 +496,40 @@ public final class Util {
     }
 
     /**
-     * Calculates the size of a directory in megabytes
+     * Total size of a directory tree, reported in megabytes.
      *
-     * @param file The directory to calculate the size of
-     * @return size of a directory in megabytes
+     * @param file The directory to measure
+     * @return size in megabytes
      */
     public static long getFolderSize(File file) {
-        return getFolderSizeBytes(file) / (1024 * 1024);
+        return bytesUnder(file) / (1024L * 1024L);
     }
 
-    private static long getFolderSizeBytes(File file) {
-        if (file == null || !file.exists()) return 0;
-        long size = 0;
-        if (file.isDirectory()) {
-            File[] files = file.listFiles();
-            if (files != null) {
-                for (File fileInDirectory : files) {
-                    size += getFolderSizeBytes(fileInDirectory);
-                }
-            }
-        } else {
-            size = file.length();
+    private static long bytesUnder(File file) {
+        if (file == null || !file.exists()) {
+            return 0;
         }
-        return size;
+        if (!file.isDirectory()) {
+            return file.length();
+        }
+        long total = 0;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                total += bytesUnder(child);
+            }
+        }
+        return total;
     }
 
     /**
-     * Get available space on the device
-     *
-     * @return
+     * Free space available at the given location, in megabytes.
      */
     public static long getFreeSpaceExternalStorage(File storagePath) {
-        if (storagePath == null || !storagePath.isDirectory()) return 0;
-        return storagePath.getFreeSpace() / 1024 / 1024;
+        if (storagePath == null || !storagePath.isDirectory()) {
+            return 0;
+        }
+        return storagePath.getFreeSpace() / (1024L * 1024L);
     }
 
     /**
@@ -563,19 +560,13 @@ public final class Util {
      * @param recording Recording
      */
     public static void deleteSingleRecording(Recording recording) {
-        if (recording == null) return;
-        //delete from storage
+        if (recording == null) {
+            return;
+        }
+        Context app = SentryApp.getAppContext();
         new File(recording.getFilePath()).delete();
-
-        //delete from db
-        DBHelper.getInstance(SentryApp.getAppContext()).deleteRecording(
-                new Recording(recording.getFilePath())
-        );
-
-        //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
-                new Intent(ACTION_UPDATE_RECORDINGS_LIST)
-        );
+        DBHelper.getInstance(app).deleteRecording(new Recording(recording.getFilePath()));
+        broadcastRecordingsChanged();
     }
 
     /**
@@ -666,83 +657,15 @@ public final class Util {
      * @param recording Recording
      */
     public static void insertNewRecording(Recording recording) {
-        if (recording == null) return;
+        if (recording == null) {
+            return;
+        }
         DBHelper.getInstance(SentryApp.getAppContext()).insertNewRecording(recording);
-
-        //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
-                new Intent(ACTION_UPDATE_RECORDINGS_LIST)
-        );
+        broadcastRecordingsChanged();
     }
 
 
-    /**
-     * Iterate over supported camera video sizes to see which one best fits the
-     * dimensions of the given view while maintaining the aspect ratio. If none can,
-     * be lenient with the aspect ratio.
-     *
-     * @param supportedVideoSizes Supported camera video sizes.
-     * @param previewSizes        Supported camera preview sizes.
-     * @param w                   The width of the view.
-     * @param h                   The height of the view.
-     * @return Best match camera video size to fit in the view.
-     */
-    public static Camera.Size getOptimalVideoSize(List<Camera.Size> supportedVideoSizes,
-                                                  List<Camera.Size> previewSizes, int w, int h) {
-        // Use a very small tolerance because we want an exact match.
-        final double ASPECT_TOLERANCE = 0.1;
-        double targetRatio = (double) 16 / 9;//(double) w / h;
-
-        // Supported video sizes list might be null, it means that we are allowed to use the preview
-        // sizes
-        List<Camera.Size> videoSizes;
-        if (supportedVideoSizes != null) {
-            videoSizes = supportedVideoSizes;
-        } else {
-            videoSizes = previewSizes;
-        }
-        Camera.Size optimalSize = null;
-
-        // Start with max value and refine as we iterate over available video sizes. This is the
-        // minimum difference between view and camera height.
-        double minDiff = Double.MAX_VALUE;
-
-        // Target view height
-        int targetHeight = h;
-
-        // Try to find a video size that matches aspect ratio and the target view size.
-        // Iterate over all available sizes and pick the largest size that can fit in the view and
-        // still maintain the aspect ratio.
-        for (Camera.Size size : videoSizes) {
-            //we need max size 1280x720
-            if (size.width == 1920) continue;
-
-            double ratio = (double) size.width / size.height;
-
-            if (Math.abs(ratio - targetRatio) > ASPECT_TOLERANCE)
-                continue;
-
-            if (Math.abs(size.height - targetHeight) < minDiff && previewSizes.contains(size)) {
-                optimalSize = size;
-                minDiff = Math.abs(size.height - targetHeight);
-            }
-        }
-
-        // Cannot find video size that matches the aspect ratio, ignore the requirement
-        if (optimalSize == null) {
-            minDiff = Double.MAX_VALUE;
-            for (Camera.Size size : videoSizes) {
-                if (Math.abs(size.height - targetHeight) < minDiff && previewSizes.contains(size)) {
-                    optimalSize = size;
-                    minDiff = Math.abs(size.height - targetHeight);
-                }
-            }
-        }
-
-        return optimalSize;
-    }
-
-    /**
+        /**
      * Create notification for status bar
      *
      * @param context Context
@@ -818,61 +741,52 @@ public final class Util {
      */
     private static File getAppPrivateVideosFolder(Context context) {
         try {
-            File[] extAppFolders = ContextCompat.getExternalFilesDirs(context, Environment.DIRECTORY_MOVIES);
-            if (extAppFolders == null) return null;
-
-            for (File file : extAppFolders) {
-                if (file != null) {
-                    //find external app-private folder (emulated - it's internal storage)
-                    if (!file.getAbsolutePath().toLowerCase().contains("emulated") && isStorageMounted(file)) {
-                        return file;
-                    }
-                }
-            }
-
-            //if external storage is not found
-            if (extAppFolders.length > 0) {
-                File appFolder;
-                //get available app-private folder form the list
-                for (int i = extAppFolders.length - 1, j = 0; i >= j; i--) {
-                    appFolder = extAppFolders[i];
-                    if (appFolder != null && isStorageMounted(appFolder)) {
-                        return appFolder;
-                    }
-                }
-            } else {
+            File[] candidates = ContextCompat.getExternalFilesDirs(context, Environment.DIRECTORY_MOVIES);
+            if (candidates == null || candidates.length == 0) {
                 return null;
             }
+
+            // Prefer a real removable card (its path is not under "emulated") when one is
+            // present and writable, so clips land on expandable storage if available.
+            for (File dir : candidates) {
+                if (dir != null
+                        && isStorageMounted(dir)
+                        && !dir.getAbsolutePath().toLowerCase(Locale.ROOT).contains("emulated")) {
+                    return dir;
+                }
+            }
+
+            // Otherwise fall back to the last writable location the platform offered
+            // (typically primary shared storage).
+            for (int i = candidates.length - 1; i >= 0; i--) {
+                File dir = candidates[i];
+                if (dir != null && isStorageMounted(dir)) {
+                    return dir;
+                }
+            }
         } catch (Exception e) {
-            Log.e(Util.class.getSimpleName(), "getAppPrivateVideosFolder: Exception - " + e.getLocalizedMessage(), e);
+            Log.e("Util", "Unable to resolve videos folder", e);
         }
         return null;
     }
 
-    /**
-     * Check if storage mounted and has read/write access.
-     *
-     * @param storagePath Storage path
-     * @return True - can write data
-     */
+    /** True when the given location is mounted and available for read/write. */
     private static boolean isStorageMounted(File storagePath) {
-        String storageState = EnvironmentCompat.getStorageState(storagePath);
-        return storageState.equals(Environment.MEDIA_MOUNTED);
+        return Environment.MEDIA_MOUNTED.equals(EnvironmentCompat.getStorageState(storagePath));
     }
 
-    /**
-     * Remove non-empty directory
-     *
-     * @param path Directory path
-     * @return True - Removed
-     */
+    /** Recursively deletes a directory tree, returning whether the root was removed. */
     private static boolean removeNonEmptyDirectory(File path) {
-        if (path.exists()) {
-            for (File file : path.listFiles()) {
-                if (file.isDirectory()) {
-                    removeNonEmptyDirectory(file);
+        if (path == null) {
+            return false;
+        }
+        File[] children = path.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    removeNonEmptyDirectory(child);
                 } else {
-                    file.delete();
+                    child.delete();
                 }
             }
         }
