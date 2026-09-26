@@ -6,9 +6,9 @@ without taking over your screen. Recordings loop within a storage budget you set
 runs indefinitely without filling up your phone, and important moments can be starred so they
 are never overwritten.
 
-Sentry is a modernized rebuild of the original Open Dash Cam project, updated for Android 13,
-rewritten on top of CameraX, and extended with loop recording, an on-video overlay, a
-recordings browser, safety automation, and more.
+Sentry is an original dash cam app by Cairn Labworks, built on CameraX with loop recording, an
+on-video overlay, a recordings browser, and safety automation. It was inspired by the
+open-source Open Dash Cam concept but is an independent implementation.
 
 ## Screenshots
 
@@ -115,4 +115,8 @@ HUD. Location is optional; the app runs without it.
 
 ## Credits
 
-Sentry is a modernized rebrand of the original [Open Dash Cam](https://github.com/maxneaga/open_dash_cam_android) project by **Maxim Neaga** and its community contributors. See [LICENSE](LICENSE) for terms — commercial use requires written permission by Maxim Neaga.
+Sentry is developed by **Cairn Labworks** and released under the [MIT License](LICENSE).
+
+It was inspired by the open-source [Open Dash Cam](https://github.com/maxneaga/open_dash_cam_android)
+project by Maxim Neaga — a nod to the idea that got us started — but Sentry is an independent
+implementation by Cairn Labworks.

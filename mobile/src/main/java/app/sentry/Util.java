@@ -496,39 +496,40 @@ public final class Util {
     }
 
     /**
-     * Calculates the size of a directory in megabytes
+     * Total size of a directory tree, reported in megabytes.
      *
-     * @param file The directory to calculate the size of
-     * @return size of a directory in megabytes
+     * @param file The directory to measure
+     * @return size in megabytes
      */
     public static long getFolderSize(File file) {
-        return getFolderSizeBytes(file) / (1024 * 1024);
+        return bytesUnder(file) / (1024L * 1024L);
     }
 
-    private static long getFolderSizeBytes(File file) {
-        if (file == null || !file.exists()) return 0;
-        long size = 0;
-        if (file.isDirectory()) {
-            File[] files = file.listFiles();
-            if (files != null) {
-                for (File fileInDirectory : files) {
-                    size += getFolderSizeBytes(fileInDirectory);
-                }
-            }
-        } else {
-            size = file.length();
+    private static long bytesUnder(File file) {
+        if (file == null || !file.exists()) {
+            return 0;
         }
-        return size;
+        if (!file.isDirectory()) {
+            return file.length();
+        }
+        long total = 0;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                total += bytesUnder(child);
+            }
+        }
+        return total;
     }
 
     /**
-     * Get available space on the device
-     *
-     * @return
+     * Free space available at the given location, in megabytes.
      */
     public static long getFreeSpaceExternalStorage(File storagePath) {
-        if (storagePath == null || !storagePath.isDirectory()) return 0;
-        return storagePath.getFreeSpace() / 1024 / 1024;
+        if (storagePath == null || !storagePath.isDirectory()) {
+            return 0;
+        }
+        return storagePath.getFreeSpace() / (1024L * 1024L);
     }
 
     /**
@@ -559,19 +560,13 @@ public final class Util {
      * @param recording Recording
      */
     public static void deleteSingleRecording(Recording recording) {
-        if (recording == null) return;
-        //delete from storage
+        if (recording == null) {
+            return;
+        }
+        Context app = SentryApp.getAppContext();
         new File(recording.getFilePath()).delete();
-
-        //delete from db
-        DBHelper.getInstance(SentryApp.getAppContext()).deleteRecording(
-                new Recording(recording.getFilePath())
-        );
-
-        //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
-                new Intent(ACTION_UPDATE_RECORDINGS_LIST)
-        );
+        DBHelper.getInstance(app).deleteRecording(new Recording(recording.getFilePath()));
+        broadcastRecordingsChanged();
     }
 
     /**
@@ -662,13 +657,11 @@ public final class Util {
      * @param recording Recording
      */
     public static void insertNewRecording(Recording recording) {
-        if (recording == null) return;
+        if (recording == null) {
+            return;
+        }
         DBHelper.getInstance(SentryApp.getAppContext()).insertNewRecording(recording);
-
-        //broadcast for updating videos list in UI
-        LocalBroadcastManager.getInstance(SentryApp.getAppContext()).sendBroadcast(
-                new Intent(ACTION_UPDATE_RECORDINGS_LIST)
-        );
+        broadcastRecordingsChanged();
     }
 
 
