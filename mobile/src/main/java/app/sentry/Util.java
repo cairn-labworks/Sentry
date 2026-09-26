@@ -112,11 +112,24 @@ public final class Util {
 
     /**
      * Whether the app should safely stop recording and quit when the battery temperature reaches
-     * {@link #getOverheatThreshold()}, to protect the device. Off by default; this is a stronger
-     * action than the overheating alert and is controlled independently of it.
+     * {@link #getOverheatShutdownThreshold()}, to protect the device. Off by default; this is a
+     * stronger action than the overheating alert and is controlled independently of it.
      */
     public static boolean isOverheatShutdownEnabled() {
         return getPrefs().getBoolean("enable_overheat_shutdown", false);
+    }
+
+    /** Margin (Celsius) above the alert threshold at which auto-stop-on-overheat triggers. */
+    public static final int OVERHEAT_SHUTDOWN_MARGIN_C = 5;
+
+    /**
+     * Battery temperature (in Celsius) at or above which recording auto-stops when
+     * {@link #isOverheatShutdownEnabled()} is on. This is deliberately hotter than the alert
+     * threshold (alert temperature + {@link #OVERHEAT_SHUTDOWN_MARGIN_C}) so the user is warned
+     * first and recording only stops if the battery keeps heating up.
+     */
+    public static int getOverheatShutdownThreshold() {
+        return getOverheatThreshold() + OVERHEAT_SHUTDOWN_MARGIN_C;
     }
 
     /**
