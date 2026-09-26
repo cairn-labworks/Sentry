@@ -120,7 +120,7 @@ public final class Util {
     }
 
     /** Margin (Celsius) above the alert threshold at which auto-stop-on-overheat triggers. */
-    public static final int OVERHEAT_SHUTDOWN_MARGIN_C = 5;
+    public static final int OVERHEAT_SHUTDOWN_MARGIN_C = 3;
 
     /**
      * Battery temperature (in Celsius) at or above which recording auto-stops when

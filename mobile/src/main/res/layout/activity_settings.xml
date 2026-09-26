@@ -420,7 +420,7 @@
 
                         <TextView
                             style="@style/SettingsItemSubtitle"
-                            android:text="Safely stop and quit if the battery gets 5\u00B0C hotter than the alert temperature above" />
+                            android:text="Safely stop and quit if the battery gets 3\u00B0C hotter than the alert temperature above" />
                     </LinearLayout>
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
